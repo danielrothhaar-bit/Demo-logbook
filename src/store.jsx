@@ -28,6 +28,19 @@ function fillIdsForSync(action) {
   }
 }
 
+const ACTIVE_DESIGNER_KEY = 'demo-logbook:activeDesignerId'
+
+function readStoredActiveDesigner() {
+  try { return localStorage.getItem(ACTIVE_DESIGNER_KEY) || null } catch { return null }
+}
+
+function writeStoredActiveDesigner(id) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_DESIGNER_KEY, id)
+    else localStorage.removeItem(ACTIVE_DESIGNER_KEY)
+  } catch {}
+}
+
 export function StoreProvider({ children }) {
   const [state, baseDispatch] = useReducer(reducer, undefined, initialState)
   const versionRef = useRef(0)
@@ -35,6 +48,12 @@ export function StoreProvider({ children }) {
   // re-binding (used to pre-compute Date.now()-derived fields).
   const stateRef = useRef(state)
   useEffect(() => { stateRef.current = state }, [state])
+
+  // Mirror activeDesignerId → localStorage. Covers cases the dispatch wrapper
+  // can't see directly (e.g. @@HYDRATE clearing a deleted designer).
+  useEffect(() => {
+    if (state.hydrated) writeStoredActiveDesigner(state.activeDesignerId)
+  }, [state.activeDesignerId, state.hydrated])
 
   // ---- Bootstrap from server ----
   useEffect(() => {
@@ -45,6 +64,12 @@ export function StoreProvider({ children }) {
         if (!alive) return
         versionRef.current = version
         baseDispatch({ type: '@@HYDRATE', state })
+        // Restore last-picked designer from localStorage (per device).
+        // Only honor it if it still maps to a known designer.
+        const stored = readStoredActiveDesigner()
+        if (stored && (state?.designers || []).some(d => d.id === stored)) {
+          baseDispatch({ type: 'SET_ACTIVE_DESIGNER', id: stored })
+        }
       })
       .catch(() => {
         // Offline / no backend — mark hydrated so the UI doesn't show a loading state forever
@@ -89,6 +114,9 @@ export function StoreProvider({ children }) {
         }
       }
     }
+
+    // Persist designer picks on the device so refresh / new tabs remember.
+    if (filled.type === 'SET_ACTIVE_DESIGNER') writeStoredActiveDesigner(filled.id)
 
     baseDispatch(filled)
     if (CLIENT_ONLY_ACTIONS.has(filled.type)) return

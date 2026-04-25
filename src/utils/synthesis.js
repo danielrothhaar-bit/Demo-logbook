@@ -179,6 +179,193 @@ function pickRepresentativeText(notes) {
     .sort((a, b) => b.length - a.length)[0] || notes[0].text
 }
 
+// ---- Puzzle-centric session analysis ----
+
+const HINT_CATS = new Set(['Hint', 'Clue'])
+
+/**
+ * For each puzzle in the game, compute:
+ *   status:      'solved' | 'attempted' | 'untouched'
+ *   firstTouchTs: earliest timestamp the puzzle was tagged
+ *   solvedTs:    timestamp of the "Puzzle Solved" note (if any)
+ *   timeOnPuzzle: solvedTs − firstTouchTs (only if solved)
+ *   negativeCount / positiveCount / hintCount / totalNotes
+ *   frustrationScore: heuristic — negatives weighted by # designers and time-on-puzzle
+ *   relatedNotes: every note tagged with this puzzle (sorted)
+ */
+export function analyzePuzzles(notes, game) {
+  const puzzles = game?.puzzles || []
+  if (!puzzles.length) return []
+
+  const live = notes.filter(n => n.kind !== 'feedback')
+
+  return puzzles.map(p => {
+    const tagged = live
+      .filter(n => (n.puzzleIds || []).includes(p.id))
+      .sort((a, b) => a.timestamp - b.timestamp)
+
+    const solveNote = tagged.find(n => (n.categories || []).includes('Puzzle Solved'))
+    const firstTouchTs = tagged.length ? tagged[0].timestamp : null
+    const solvedTs = solveNote ? solveNote.timestamp : null
+    const timeOnPuzzle = solvedTs != null && firstTouchTs != null ? solvedTs - firstTouchTs : null
+
+    const negativeNotes = tagged.filter(n => (n.categories || []).some(c => NEGATIVE.has(c)))
+    const positiveNotes = tagged.filter(n => (n.categories || []).some(c => POSITIVE.has(c)))
+    const hintNotes     = tagged.filter(n => (n.categories || []).some(c => HINT_CATS.has(c)))
+
+    const negativeCount = negativeNotes.length
+    const positiveCount = positiveNotes.length
+    const hintCount     = hintNotes.length
+    const totalNotes    = tagged.length
+
+    // Frustration score: # negatives × (1 + # distinct designers behind those negatives)
+    // This penalizes puzzles that frustrate multiple designers.
+    const negDesigners = new Set(negativeNotes.map(n => n.designerId)).size
+    const frustrationScore = negativeCount * (1 + negDesigners)
+
+    let status
+    if (solvedTs != null) status = 'solved'
+    else if (totalNotes > 0) status = 'attempted'
+    else status = 'untouched'
+
+    return {
+      id: p.id,
+      name: p.name,
+      code: p.code || '',
+      status,
+      firstTouchTs,
+      solvedTs,
+      timeOnPuzzle,
+      negativeCount,
+      positiveCount,
+      hintCount,
+      totalNotes,
+      frustrationScore,
+      relatedNotes: tagged
+    }
+  })
+}
+
+/**
+ * Bucket negative-category notes into per-minute bins so the UI can render
+ * a small histogram of "where did frustration spike?".
+ *
+ * Returns { binSec, bins: [{ index, startTs, endTs, count, notes }], peakIndex }
+ */
+export function frustrationDensity(notes, totalSec, binSec = 60) {
+  const negNotes = (notes || [])
+    .filter(n => n.kind !== 'feedback' && (n.categories || []).some(c => NEGATIVE.has(c)))
+    .sort((a, b) => a.timestamp - b.timestamp)
+
+  const span = Math.max(totalSec || 0, ...negNotes.map(n => n.timestamp), binSec)
+  const binCount = Math.max(1, Math.ceil(span / binSec))
+  const bins = Array.from({ length: binCount }, (_, i) => ({
+    index: i,
+    startTs: i * binSec,
+    endTs: (i + 1) * binSec,
+    count: 0,
+    notes: []
+  }))
+  for (const n of negNotes) {
+    const idx = Math.max(0, Math.min(binCount - 1, Math.floor((n.timestamp || 0) / binSec)))
+    bins[idx].count++
+    bins[idx].notes.push(n)
+  }
+  let peakIndex = -1
+  let peak = 0
+  for (const b of bins) if (b.count > peak) { peak = b.count; peakIndex = b.index }
+  return { binSec, bins, peakIndex, peakCount: peak }
+}
+
+/**
+ * "Stuck zones" — runs of negative notes that pile up without a positive
+ * resolution in between. Useful for spotting where players were spinning.
+ *
+ * Returns groups sorted by descending duration × note count.
+ */
+export function findStuckZones(notes, { gapSec = 90, minNotes = 2 } = {}) {
+  const live = (notes || []).filter(n => n.kind !== 'feedback')
+  const sorted = [...live].sort((a, b) => a.timestamp - b.timestamp)
+  if (!sorted.length) return []
+
+  const isNeg = (n) => (n.categories || []).some(c => NEGATIVE.has(c))
+  const isPos = (n) => (n.categories || []).some(c => POSITIVE.has(c))
+
+  const zones = []
+  let bucket = []
+
+  const flush = () => {
+    if (bucket.length >= minNotes) {
+      const start = bucket[0].timestamp
+      const end = bucket[bucket.length - 1].timestamp
+      zones.push({
+        notes: bucket,
+        startTs: start,
+        endTs: end,
+        duration: end - start,
+        designerIds: [...new Set(bucket.map(n => n.designerId))]
+      })
+    }
+    bucket = []
+  }
+
+  for (const n of sorted) {
+    if (isPos(n)) { flush(); continue }
+    if (!isNeg(n)) continue
+    if (!bucket.length) { bucket.push(n); continue }
+    const last = bucket[bucket.length - 1]
+    if (n.timestamp - last.timestamp <= gapSec) bucket.push(n)
+    else { flush(); bucket = [n] }
+  }
+  flush()
+
+  return zones.sort((a, b) =>
+    (b.duration * b.notes.length) - (a.duration * a.notes.length)
+  )
+}
+
+/**
+ * Single-session top-line metrics for the redesigned Summary tab.
+ */
+export function sessionMetrics(notes, game, totalSec) {
+  const live = (notes || []).filter(n => n.kind !== 'feedback')
+  const puzzleStats = analyzePuzzles(live, game)
+  const solved = puzzleStats.filter(p => p.status === 'solved')
+  const attempted = puzzleStats.filter(p => p.status !== 'untouched')
+  const negCount = live.filter(n => (n.categories || []).some(c => NEGATIVE.has(c))).length
+  const posCount = live.filter(n => (n.categories || []).some(c => POSITIVE.has(c))).length
+  const hintCount = live.filter(n => (n.categories || []).some(c => HINT_CATS.has(c))).length
+
+  const hardest = [...puzzleStats]
+    .filter(p => p.frustrationScore > 0)
+    .sort((a, b) => b.frustrationScore - a.frustrationScore)[0] || null
+
+  const fastestSolve = [...solved]
+    .filter(p => p.timeOnPuzzle != null && p.timeOnPuzzle >= 0)
+    .sort((a, b) => a.timeOnPuzzle - b.timeOnPuzzle)[0] || null
+
+  const slowestSolve = [...solved]
+    .filter(p => p.timeOnPuzzle != null && p.timeOnPuzzle >= 0)
+    .sort((a, b) => b.timeOnPuzzle - a.timeOnPuzzle)[0] || null
+
+  const totalPuzzles = puzzleStats.length
+  return {
+    puzzleStats,
+    solved,
+    attempted,
+    totalPuzzles,
+    solveRate: totalPuzzles ? solved.length / totalPuzzles : 0,
+    negCount,
+    posCount,
+    hintCount,
+    totalNotes: live.length,
+    hardest,
+    fastestSolve,
+    slowestSolve,
+    durationSec: totalSec || 0
+  }
+}
+
 // AI-style summary based purely on counts and clustering.
 export function summarize(notes, designersById) {
   if (!notes.length) {

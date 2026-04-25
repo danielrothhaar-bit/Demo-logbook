@@ -187,7 +187,9 @@ export function initialPersistedState() {
 export function initialState() {
   return {
     ...initialPersistedState(),
-    activeDesignerId: 'd1',
+    // Per-device, restored from localStorage in store.jsx; null means
+    // "nobody picked yet" and the live UI prompts the user to choose.
+    activeDesignerId: null,
     activeSessionId: null,
     reviewSessionId: null,
     mode: 'home',
@@ -263,9 +265,11 @@ export function reducer(state, action) {
           audioUrl: n.audioUrl ?? null
         }))
       }))
-      // If active designer was deleted on another device, fall back to the first one
-      if (!next.designers.some(d => d.id === next.activeDesignerId)) {
-        next.activeDesignerId = next.designers[0]?.id || null
+      // If the active designer was deleted on another device, drop the
+      // selection so the user is prompted to pick again rather than
+      // silently logging as someone else.
+      if (next.activeDesignerId && !next.designers.some(d => d.id === next.activeDesignerId)) {
+        next.activeDesignerId = null
       }
       return next
     }

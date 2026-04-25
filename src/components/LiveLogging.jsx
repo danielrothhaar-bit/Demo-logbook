@@ -35,6 +35,10 @@ export default function LiveLogging() {
     return <LiveListing />
   }
 
+  if (!activeDesigner) {
+    return <DesignerPicker designers={state.designers} onPick={(id) => dispatch({ type: 'SET_ACTIVE_DESIGNER', id })} />
+  }
+
   const currentSec = activeSession.timerRunning && activeSession.timerStartedAt
     ? Math.floor((Date.now() - activeSession.timerStartedAt) / 1000)
     : activeSession.timerElapsed
@@ -584,6 +588,43 @@ function LiveListing() {
         })}
       </div>
       {startNew}
+    </div>
+  )
+}
+
+// ============================================================================
+// DesignerPicker — full-screen prompt shown when no designer is selected.
+// ============================================================================
+function DesignerPicker({ designers, onPick }) {
+  return (
+    <div className="px-4 pt-4 space-y-4">
+      <div className="rounded-2xl bg-ink-800 border border-accent-400/40 p-5">
+        <div className="text-accent-300 text-xs uppercase tracking-wider font-semibold mb-1">Who's logging?</div>
+        <div className="text-sm text-ink-200">Pick your name so notes are attributed correctly. We'll remember this on this device.</div>
+      </div>
+      {designers.length === 0 ? (
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-ink-400">
+          No designers yet — add one in Admin → Designers.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {designers.map(d => (
+            <button
+              key={d.id}
+              onClick={() => onPick(d.id)}
+              className="flex items-center gap-3 p-4 rounded-2xl bg-ink-800 border border-ink-700 active:bg-ink-700 text-left"
+            >
+              <span
+                className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-ink-950"
+                style={{ backgroundColor: d.color }}
+              >
+                {d.initials}
+              </span>
+              <span className="font-semibold truncate">{d.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

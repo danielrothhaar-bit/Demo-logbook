@@ -3,7 +3,8 @@ import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
-  findConsensus, findDivergence, findDuplicates, summarize
+  findConsensus, findDivergence, findDuplicates, summarize,
+  analyzePuzzles, frustrationDensity, findStuckZones, sessionMetrics
 } from '../utils/synthesis.js'
 
 const TABS = [
@@ -288,7 +289,8 @@ function SessionPicker() {
 // ============================================================================
 
 function ReviewBody({ session: reviewSession }) {
-  const { dispatch } = useStore()
+  const { dispatch, gameById } = useStore()
+  const reviewGame = gameById(reviewSession.gameId)
   const [tab, setTab] = useState('timeline')
   const [filterCats, setFilterCats] = useState([])
   const [filterDesigners, setFilterDesigners] = useState([])
@@ -324,6 +326,10 @@ function ReviewBody({ session: reviewSession }) {
   const divergence = useMemo(() => findDivergence(synthNotes), [synthNotes])
   const duplicates = useMemo(() => findDuplicates(synthNotes), [synthNotes])
   const summary    = useMemo(() => summarize(synthNotes),      [synthNotes])
+  const puzzleStats = useMemo(() => analyzePuzzles(synthNotes, reviewGame), [synthNotes, reviewGame])
+  const stuckZones  = useMemo(() => findStuckZones(synthNotes),              [synthNotes])
+  const density     = useMemo(() => frustrationDensity(synthNotes, totalSec), [synthNotes, totalSec])
+  const metrics     = useMemo(() => sessionMetrics(synthNotes, reviewGame, totalSec), [synthNotes, reviewGame, totalSec])
 
   const timeline = useMemo(() => {
     const dupNoteIds = new Set()
@@ -423,11 +429,18 @@ function ReviewBody({ session: reviewSession }) {
       )}
 
       {tab === 'synthesis' && (
-        <Synthesis consensus={consensus} divergence={divergence} duplicates={duplicates} />
+        <Synthesis
+          consensus={consensus}
+          divergence={divergence}
+          duplicates={duplicates}
+          puzzleStats={puzzleStats}
+          stuckZones={stuckZones}
+          density={density}
+        />
       )}
 
       {tab === 'summary' && (
-        <Summary summary={summary} session={reviewSession} />
+        <Summary summary={summary} metrics={metrics} session={reviewSession} />
       )}
 
       {editNote && (
@@ -728,11 +741,43 @@ function MergedCard({ group }) {
   )
 }
 
-function Synthesis({ consensus, divergence, duplicates }) {
+function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones, density }) {
   const { designerById, categoryColor } = useStore()
   const POSITIVE_SET = new Set(['Wow Moment', 'Puzzle Solved'])
   return (
     <div className="space-y-4">
+      <PuzzleProgressSection puzzles={puzzleStats} />
+
+      <FrustrationTimelineSection density={density} />
+
+      <Section title="Stuck zones" hint="Runs of negative notes without a positive resolution in between.">
+        {stuckZones.length === 0 && <Empty text="No sustained stuck zones detected." />}
+        {stuckZones.map((z, i) => (
+          <div key={i} className="rounded-2xl bg-ink-800 border border-rose-500/40 p-3 animate-fadeUp">
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <span className="font-mono text-ink-300">{fmtCountdown(z.startTs)}–{fmtCountdown(z.endTs)}</span>
+              <span className="text-rose-300 font-semibold">{z.notes.length} negative notes</span>
+              <span className="text-ink-400">over {fmtTime(z.duration)}</span>
+              {z.designerIds.length > 1 && (
+                <span className="text-ink-400">· {z.designerIds.length} designers</span>
+              )}
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {z.notes.map(n => {
+                const d = designerById(n.designerId)
+                return (
+                  <div key={n.id} className="text-sm text-rose-100 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2">
+                    <span className="font-mono text-[10px] text-rose-300/70 mr-2">{fmtCountdown(n.timestamp)}</span>
+                    <span className="font-bold mr-2" style={{ color: d?.color }}>{d?.initials}</span>
+                    {n.text}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </Section>
+
       <Section title="Consensus observations" hint="Multiple designers logged the same kind of moment within ~90s.">
         {consensus.length === 0 && <Empty text="No consensus moments detected." />}
         {consensus.map((c, i) => (
@@ -796,15 +841,262 @@ function Synthesis({ consensus, divergence, duplicates }) {
   )
 }
 
-function Summary({ summary, session }) {
+function PuzzleProgressSection({ puzzles }) {
+  const { designerById } = useStore()
+  const [openId, setOpenId] = useState(null)
+
+  if (!puzzles.length) {
+    return (
+      <Section title="Puzzle progress" hint="Solve status per puzzle for this demo.">
+        <Empty text="No puzzles defined for this game. Add them in Admin → Games → puzzles." />
+      </Section>
+    )
+  }
+
+  // Order: untouched last, then attempted-but-stuck (most frustration first),
+  // then solved (slowest first so trouble spots stay near the top).
+  const ordered = [...puzzles].sort((a, b) => {
+    const order = { attempted: 0, solved: 1, untouched: 2 }
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status]
+    if (a.status === 'attempted') return b.frustrationScore - a.frustrationScore
+    if (a.status === 'solved') return (b.timeOnPuzzle || 0) - (a.timeOnPuzzle || 0)
+    return 0
+  })
+
+  const solvedCount = puzzles.filter(p => p.status === 'solved').length
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl bg-gradient-to-br from-accent-500/15 to-emerald-500/10 border border-accent-500/30 p-4">
-        <div className="text-xs uppercase tracking-wider text-accent-400 mb-1">Auto-summary</div>
-        <div className="text-sm text-ink-200">
-          Heuristic synthesis of {session.notes.length} notes from this demo.
+    <Section title="Puzzle progress" hint={`${solvedCount} of ${puzzles.length} solved this demo.`}>
+      <div className="grid grid-cols-1 gap-2">
+        {ordered.map(p => {
+          const expanded = openId === p.id
+          return (
+            <div key={p.id} className="rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+              <button
+                onClick={() => setOpenId(expanded ? null : p.id)}
+                className="w-full text-left p-3 active:bg-ink-700"
+              >
+                <div className="flex items-start gap-3">
+                  <PuzzleStatusBadge status={p.status} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {p.code && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-ink-400 border border-ink-700">
+                          {p.code}
+                        </span>
+                      )}
+                      <span className="font-semibold truncate">{p.name}</span>
+                    </div>
+                    <PuzzleStatusLine puzzle={p} />
+                  </div>
+                  {(p.negativeCount > 0 || p.hintCount > 0) && (
+                    <div className="flex flex-col items-end gap-0.5 text-[11px] tabular-nums">
+                      {p.negativeCount > 0 && <span className="text-rose-300">{p.negativeCount} neg</span>}
+                      {p.hintCount > 0 && <span className="text-amber-300">{p.hintCount} hint</span>}
+                    </div>
+                  )}
+                </div>
+              </button>
+              {expanded && p.relatedNotes.length > 0 && (
+                <div className="border-t border-ink-700 bg-ink-900/40 p-3 space-y-1.5">
+                  {p.relatedNotes.map(n => {
+                    const d = designerById(n.designerId)
+                    const neg = (n.categories || []).some(c => ['Game Flow Issue','Puzzle Logic Issue','Tech Issue','Frustration'].includes(c))
+                    const pos = (n.categories || []).some(c => ['Wow Moment','Puzzle Solved'].includes(c))
+                    return (
+                      <div key={n.id} className={`text-xs rounded-lg p-2 border ${
+                        pos ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-100'
+                            : neg ? 'bg-rose-500/10 border-rose-500/20 text-rose-100'
+                                  : 'bg-ink-900 border-ink-800 text-ink-200'
+                      }`}>
+                        <span className="font-mono text-[10px] mr-2 opacity-70">{fmtCountdown(n.timestamp)}</span>
+                        <span className="font-bold mr-2" style={{ color: d?.color }}>{d?.initials}</span>
+                        {n.text}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {expanded && p.relatedNotes.length === 0 && (
+                <div className="border-t border-ink-700 bg-ink-900/40 p-3 text-xs text-ink-500 italic">
+                  No notes mentioned this puzzle.
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  )
+}
+
+function PuzzleStatusBadge({ status }) {
+  if (status === 'solved') {
+    return (
+      <span className="w-9 h-9 rounded-full flex items-center justify-center bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </span>
+    )
+  }
+  if (status === 'attempted') {
+    return (
+      <span className="w-9 h-9 rounded-full flex items-center justify-center bg-amber-500/15 border border-amber-500/40 text-amber-300 flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12" y2="17.01" />
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        </svg>
+      </span>
+    )
+  }
+  return (
+    <span className="w-9 h-9 rounded-full flex items-center justify-center bg-ink-700 border border-ink-600 text-ink-400 flex-shrink-0">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12" />
+      </svg>
+    </span>
+  )
+}
+
+function PuzzleStatusLine({ puzzle: p }) {
+  const parts = []
+  if (p.status === 'solved') {
+    parts.push(`solved at ${fmtCountdown(p.solvedTs)}`)
+    if (p.timeOnPuzzle != null && p.timeOnPuzzle > 0) {
+      parts.push(`took ${fmtTime(p.timeOnPuzzle)}`)
+    }
+  } else if (p.status === 'attempted') {
+    if (p.firstTouchTs != null) parts.push(`first hit ${fmtCountdown(p.firstTouchTs)}`)
+    parts.push('not solved')
+  } else {
+    parts.push('not mentioned')
+  }
+  return (
+    <div className="text-[11px] text-ink-400 mt-0.5 truncate">
+      {parts.join(' · ')}
+    </div>
+  )
+}
+
+function FrustrationTimelineSection({ density }) {
+  const { binSec, bins, peakIndex, peakCount } = density
+  const totalNeg = bins.reduce((sum, b) => sum + b.count, 0)
+  if (totalNeg === 0) {
+    return (
+      <Section title="Frustration timeline" hint="Where negative notes piled up across the demo.">
+        <Empty text="No frustration / friction notes — clean run." />
+      </Section>
+    )
+  }
+  return (
+    <Section title="Frustration timeline" hint={`${totalNeg} negative note${totalNeg === 1 ? '' : 's'} bucketed by minute.`}>
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-3">
+        <div className="flex items-end gap-0.5 h-20">
+          {bins.map(b => {
+            const ratio = peakCount ? b.count / peakCount : 0
+            const isPeak = b.index === peakIndex && b.count > 0
+            return (
+              <div
+                key={b.index}
+                className="flex-1 flex flex-col justify-end h-full"
+                title={`${fmtCountdown(b.startTs)} – ${fmtCountdown(b.endTs)}: ${b.count} note${b.count === 1 ? '' : 's'}`}
+              >
+                <div
+                  className={`w-full rounded-t ${
+                    b.count === 0
+                      ? 'bg-ink-700/60'
+                      : isPeak
+                        ? 'bg-rose-400'
+                        : 'bg-rose-500/60'
+                  }`}
+                  style={{ height: b.count === 0 ? '6%' : `${Math.max(12, ratio * 100)}%` }}
+                />
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[10px] text-ink-500 mt-1.5 font-mono tabular-nums">
+          <span>{fmtCountdown(0)}</span>
+          {peakIndex >= 0 && peakCount > 0 && (
+            <span className="text-rose-300">peak {peakCount}× near {fmtCountdown(bins[peakIndex].startTs)}</span>
+          )}
+          <span>{fmtCountdown(bins[bins.length - 1].endTs)}</span>
         </div>
       </div>
+    </Section>
+  )
+}
+
+function Summary({ summary, metrics, session }) {
+  const fmtSecs = (s) => s != null ? fmtTime(s) : '—'
+
+  return (
+    <div className="space-y-4">
+      {/* Headline stats */}
+      <div className="grid grid-cols-2 gap-2">
+        <StatCard
+          label="Puzzles solved"
+          value={metrics.totalPuzzles
+            ? `${metrics.solved.length}/${metrics.totalPuzzles}`
+            : '—'}
+          sub={metrics.totalPuzzles ? `${Math.round(metrics.solveRate * 100)}%` : ''}
+          accent={metrics.solveRate >= 0.8 ? 'emerald' : metrics.solveRate >= 0.5 ? 'amber' : 'rose'}
+        />
+        <StatCard
+          label="Frustration"
+          value={String(metrics.negCount)}
+          sub={`${metrics.hintCount} hint${metrics.hintCount === 1 ? '' : 's'}`}
+          accent={metrics.negCount === 0 ? 'emerald' : metrics.negCount > 6 ? 'rose' : 'amber'}
+        />
+        <StatCard
+          label="Wow moments"
+          value={String(metrics.posCount)}
+          accent="emerald"
+        />
+        <StatCard
+          label="Total notes"
+          value={String(metrics.totalNotes)}
+          sub={fmtTime(metrics.durationSec)}
+          accent="ink"
+        />
+      </div>
+
+      {/* Hardest puzzle / Fastest solve callouts */}
+      {(metrics.hardest || metrics.fastestSolve || metrics.slowestSolve) && (
+        <div className="grid grid-cols-1 gap-2">
+          {metrics.hardest && (
+            <Callout
+              tone="rose"
+              label="Hardest this demo"
+              title={metrics.hardest.name}
+              meta={[
+                `${metrics.hardest.negativeCount} negative note${metrics.hardest.negativeCount === 1 ? '' : 's'}`,
+                metrics.hardest.hintCount > 0 ? `${metrics.hardest.hintCount} hint${metrics.hardest.hintCount === 1 ? '' : 's'}` : null,
+                metrics.hardest.status === 'solved'
+                  ? `solved at ${fmtCountdown(metrics.hardest.solvedTs)}`
+                  : 'unsolved'
+              ].filter(Boolean).join(' · ')}
+            />
+          )}
+          {metrics.fastestSolve && (
+            <Callout
+              tone="emerald"
+              label="Fastest solve"
+              title={metrics.fastestSolve.name}
+              meta={`${fmtSecs(metrics.fastestSolve.timeOnPuzzle)} from first mention to solve · solved at ${fmtCountdown(metrics.fastestSolve.solvedTs)}`}
+            />
+          )}
+          {metrics.slowestSolve && metrics.slowestSolve.id !== metrics.fastestSolve?.id && (
+            <Callout
+              tone="amber"
+              label="Longest solve"
+              title={metrics.slowestSolve.name}
+              meta={`${fmtSecs(metrics.slowestSolve.timeOnPuzzle)} from first mention to solve · solved at ${fmtCountdown(metrics.slowestSolve.solvedTs)}`}
+            />
+          )}
+        </div>
+      )}
 
       <Section title="Top issues" emoji="🔥">
         {summary.issues.length === 0 ? <Empty text="No issues flagged." /> :
@@ -823,6 +1115,47 @@ function Summary({ summary, session }) {
           ))
         }
       </Section>
+
+      <div className="text-[11px] text-ink-500 text-center pt-2">
+        Heuristic synthesis of {session.notes.length} notes from this demo.
+      </div>
+    </div>
+  )
+}
+
+const ACCENT_CLASSES = {
+  emerald: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-100',
+  amber:   'bg-amber-500/15 border-amber-500/40 text-amber-100',
+  rose:    'bg-rose-500/15 border-rose-500/40 text-rose-100',
+  ink:     'bg-ink-800 border-ink-700 text-ink-100'
+}
+
+function StatCard({ label, value, sub, accent = 'ink' }) {
+  return (
+    <div className={`rounded-2xl border p-3 ${ACCENT_CLASSES[accent] || ACCENT_CLASSES.ink}`}>
+      <div className="text-[10px] uppercase tracking-wider opacity-80">{label}</div>
+      <div className="text-2xl font-bold tabular-nums leading-tight mt-0.5">{value}</div>
+      {sub && <div className="text-[11px] opacity-75 mt-0.5">{sub}</div>}
+    </div>
+  )
+}
+
+function Callout({ tone, label, title, meta }) {
+  const tones = {
+    rose:    'bg-rose-500/10 border-rose-500/40 text-rose-100',
+    emerald: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-100',
+    amber:   'bg-amber-500/10 border-amber-500/40 text-amber-100'
+  }
+  const labelTones = {
+    rose: 'text-rose-300',
+    emerald: 'text-emerald-300',
+    amber: 'text-amber-300'
+  }
+  return (
+    <div className={`rounded-2xl border p-3 ${tones[tone] || tones.amber}`}>
+      <div className={`text-[10px] uppercase tracking-wider font-semibold ${labelTones[tone] || ''}`}>{label}</div>
+      <div className="font-semibold text-base mt-0.5">{title}</div>
+      <div className="text-[12px] opacity-80 mt-0.5 font-mono tabular-nums">{meta}</div>
     </div>
   )
 }
