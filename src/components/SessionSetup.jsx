@@ -1,34 +1,63 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 
 export default function SessionSetup() {
-  const { dispatch } = useStore()
-  const [roomName, setRoomName] = useState('')
+  const { state, dispatch, newestGame } = useStore()
+  const newest = newestGame()
+  const [gameId, setGameId] = useState(newest?.id || '')
   const [teamSize, setTeamSize] = useState(4)
   const [experience, setExperience] = useState('experienced')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
 
+  // If games change while open (e.g. user adds via admin), default to newest
+  useEffect(() => {
+    if (!gameId && newest) setGameId(newest.id)
+  }, [newest, gameId])
+
   const submit = () => {
-    if (!roomName.trim()) return
+    if (!gameId) return
     dispatch({
       type: 'CREATE_SESSION',
-      roomName: roomName.trim(),
+      gameId,
       teamSize,
       experience,
       date
     })
   }
 
+  // Sort games newest first so the default is at the top
+  const sortedGames = [...state.games].sort((a, b) => b.createdAt - a.createdAt)
+
+  if (sortedGames.length === 0) {
+    return (
+      <div className="px-4 pt-6 space-y-4">
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
+          <div className="font-semibold mb-1">No games yet</div>
+          <div className="text-sm text-ink-400 mb-4">Add a game in Admin before starting a session.</div>
+          <button
+            onClick={() => dispatch({ type: 'SET_MODE', mode: 'admin' })}
+            className="px-5 py-3 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-bold"
+          >Open Admin</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="px-4 pt-4 space-y-5">
-      <Field label="Room name">
-        <input
-          autoFocus
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
-          placeholder="The Vault"
-          className="w-full bg-ink-800 border border-ink-700 rounded-xl px-4 py-3 text-base outline-none focus:border-accent-500"
-        />
+      <Field label="Game">
+        <select
+          value={gameId}
+          onChange={(e) => setGameId(e.target.value)}
+          className="w-full bg-ink-800 border border-ink-700 rounded-xl px-4 py-3 text-base outline-none focus:border-accent-500 appearance-none bg-no-repeat bg-right pr-10"
+          style={{ backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%239aa7c2\' stroke-width=\'3\'><polyline points=\'6 9 12 15 18 9\'/></svg>")', backgroundPosition: 'right 1rem center' }}
+        >
+          {sortedGames.map((g, i) => (
+            <option key={g.id} value={g.id}>
+              {g.name}{i === 0 ? ' (newest)' : ''}
+            </option>
+          ))}
+        </select>
       </Field>
 
       <Field label="Team size">
@@ -57,7 +86,7 @@ export default function SessionSetup() {
               onClick={() => setExperience(opt.id)}
               className={`py-3 rounded-xl text-sm font-medium border transition-colors ${
                 experience === opt.id
-                  ? 'bg-accent-500 text-ink-950 border-accent-500'
+                  ? 'bg-accent-500 text-ink-50 border-accent-500'
                   : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
               }`}
             >{opt.label}</button>
@@ -81,8 +110,8 @@ export default function SessionSetup() {
         >Cancel</button>
         <button
           onClick={submit}
-          disabled={!roomName.trim()}
-          className="flex-[2] py-4 rounded-2xl bg-accent-500 active:bg-accent-600 disabled:opacity-40 disabled:active:bg-accent-500 text-ink-950 font-bold"
+          disabled={!gameId}
+          className="flex-[2] py-4 rounded-2xl bg-accent-500 active:bg-accent-600 disabled:opacity-40 text-ink-50 font-bold"
         >Start Logging</button>
       </div>
     </div>

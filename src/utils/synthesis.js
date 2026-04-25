@@ -99,8 +99,8 @@ export function findConsensus(notes, { windowSec = 90 } = {}) {
 }
 
 // Divergence: same cluster, contradictory categories (positive vs negative)
-const POSITIVE = new Set(['Wow Moment', 'Puzzle Flow'])
-const NEGATIVE = new Set(['Friction Point', 'Tech Issue', 'Theming Gap'])
+const POSITIVE = new Set(['Wow Moment', 'Puzzle Solved'])
+const NEGATIVE = new Set(['Game Flow Issue', 'Puzzle Logic Issue', 'Tech Issue', 'Frustration'])
 
 export function findDivergence(notes, { windowSec = 90 } = {}) {
   const clusters = clusterByTime(notes, windowSec)
@@ -109,8 +109,8 @@ export function findDivergence(notes, { windowSec = 90 } = {}) {
     const designerCount = new Set(cluster.map(n => n.designerId)).size
     if (designerCount < 2) continue
 
-    const positives = cluster.filter(n => n.categories?.some(c => POSITIVE.has(c)))
-    const negatives = cluster.filter(n => n.categories?.some(c => NEGATIVE.has(c)))
+    const positives = cluster.filter(n => n.kind !== 'feedback' && n.categories?.some(c => POSITIVE.has(c)))
+    const negatives = cluster.filter(n => n.kind !== 'feedback' && n.categories?.some(c => NEGATIVE.has(c)))
     const posDesigners = new Set(positives.map(n => n.designerId))
     const negDesigners = new Set(negatives.map(n => n.designerId))
 
@@ -245,10 +245,12 @@ function topMoments(notes, consensus, n) {
 function actionPhrase(issue) {
   const cat = issue.category
   const text = issue.text
-  if (cat === 'Friction Point') return `Address friction at ${formatStamp(issue.timestamp)}: "${truncate(text, 80)}"`
-  if (cat === 'Tech Issue')      return `Investigate tech issue at ${formatStamp(issue.timestamp)}: "${truncate(text, 80)}"`
-  if (cat === 'Theming Gap')     return `Improve theming at ${formatStamp(issue.timestamp)}: "${truncate(text, 80)}"`
-  return `Review at ${formatStamp(issue.timestamp)}: "${truncate(text, 80)}"`
+  const stamp = formatStamp(issue.timestamp)
+  if (cat === 'Frustration')        return `Reduce frustration at ${stamp}: "${truncate(text, 80)}"`
+  if (cat === 'Puzzle Logic Issue') return `Clarify puzzle logic at ${stamp}: "${truncate(text, 80)}"`
+  if (cat === 'Tech Issue')         return `Investigate tech issue at ${stamp}: "${truncate(text, 80)}"`
+  if (cat === 'Game Flow Issue')    return `Improve game flow at ${stamp}: "${truncate(text, 80)}"`
+  return `Review at ${stamp}: "${truncate(text, 80)}"`
 }
 
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s }
@@ -257,19 +259,83 @@ function formatStamp(sec) {
   return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`
 }
 
+// ---- Feedback Discussion analysis ----
+//
+// The Web Speech API has no speaker diarization, so we use a heuristic:
+//   - Sentences that end in "?" or start with an interrogative are designer questions.
+//   - Everything else is a guest answer / statement.
+// This isn't real diarization, but it's a useful approximation for post-playthrough debriefs
+// where designers ask, guests answer.
+//
+const INTERROGATIVE = /^(how|what|why|when|where|who|which|did|do|does|are|is|was|were|would|could|should|can|will|tell\s+me|on\s+a\s+scale|rate|rank|compare|compared)\b/i
+
+export function analyzeFeedback(transcript) {
+  if (!transcript) return { items: [], questions: [], answers: [], difficulty: null, ranking: null, isFavorite: false, summary: '' }
+
+  const sentences = transcript
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+
+  const items = sentences.map(s => ({
+    text: s,
+    speaker: (s.endsWith('?') || INTERROGATIVE.test(s)) ? 'designer' : 'guest'
+  }))
+
+  const questions = items.filter(i => i.speaker === 'designer')
+  const answers = items.filter(i => i.speaker === 'guest')
+
+  // Difficulty: "8 out of 10", "8/10", "an 8", "rate it 8"
+  let difficulty = null
+  const diff1 = transcript.match(/(\d{1,2})\s*(?:\/|out of)\s*10\b/i)
+  const diff2 = !diff1 && transcript.match(/(?:rate|rated|difficulty|hard(?:ness)?|score)[^0-9]{0,40}?(\d{1,2})\b/i)
+  const diff3 = !diff1 && !diff2 && transcript.match(/\b(?:i'?d\s+say|maybe|probably)[^0-9]{0,15}?(\d{1,2})\s*(?:\/|out of)\s*10\b/i)
+  const m = diff1 || diff2 || diff3
+  if (m) {
+    const v = parseInt(m[1], 10)
+    if (!isNaN(v) && v >= 1 && v <= 10) difficulty = v
+  }
+
+  // Ranking / favorite
+  let ranking = null
+  const rank1 = transcript.match(/\btop\s+(\d+)\b/i)
+  const rank2 = !rank1 && transcript.match(/\branked?\s+(?:it\s+)?(?:my\s+)?(\d+)(?:st|nd|rd|th)?\b/i)
+  const rank3 = !rank1 && !rank2 && transcript.match(/\b(?:my\s+)?#\s*(\d+)\b/i)
+  const r = rank1 || rank2 || rank3
+  if (r) ranking = parseInt(r[1], 10)
+  const isFavorite = /\bfav(?:ou)?rite\b/i.test(transcript)
+
+  // Build a brief summary of the most salient guest statements (longest 3 answers)
+  const summaryAnswers = [...answers]
+    .map(a => a.text)
+    .filter(t => t.split(/\s+/).length >= 5)
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 3)
+
+  return {
+    items,
+    questions,
+    answers,
+    difficulty,
+    ranking,
+    isFavorite,
+    summary: summaryAnswers.join(' ')
+  }
+}
+
 // ---- Cross-session aggregation ----
 
-export function aggregateAcrossSessions(sessions, room) {
-  const relevant = room ? sessions.filter(s => s.roomName === room) : sessions
+export function aggregateAcrossSessions(sessions, gameId) {
+  const relevant = gameId ? sessions.filter(s => s.gameId === gameId) : sessions
   const total = relevant.length
-  if (!total) return { rooms: [], byMinute: {}, recurringFriction: [], categoryCounts: {} }
+  if (!total) return { total: 0, recurringFriction: [], categoryCounts: {} }
 
-  // Recurring friction: cluster friction notes across sessions by minute and shared keywords
+  // Recurring friction: cluster friction notes across sessions by minute
   const frictionByMinute = {}
   const categoryCounts = {}
   for (const sess of relevant) {
-    const seenMinutes = new Set()
     for (const n of sess.notes) {
+      if (n.kind === 'feedback') continue
       for (const c of n.categories || []) {
         categoryCounts[c] = (categoryCounts[c] || 0) + 1
       }
@@ -279,7 +345,6 @@ export function aggregateAcrossSessions(sessions, room) {
       frictionByMinute[key] = frictionByMinute[key] || { minute, sessionIds: new Set(), notes: [] }
       frictionByMinute[key].sessionIds.add(sess.id)
       frictionByMinute[key].notes.push({ ...n, sessionId: sess.id })
-      seenMinutes.add(minute)
     }
   }
   const recurringFriction = Object.values(frictionByMinute)

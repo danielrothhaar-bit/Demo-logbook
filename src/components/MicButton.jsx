@@ -1,35 +1,6 @@
-import React, { useEffect } from 'react'
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
+import React from 'react'
 
-export default function MicButton({ onCommit, draft, setDraft }) {
-  const sr = useSpeechRecognition()
-
-  // While listening, surface live transcript into draft for visual confirmation
-  useEffect(() => {
-    if (sr.isListening) {
-      const live = (sr.finalTranscript + ' ' + sr.interim).trim()
-      if (live) setDraft(live)
-    }
-  }, [sr.isListening, sr.finalTranscript, sr.interim, setDraft])
-
-  const tap = () => {
-    if (!sr.supported) return
-    if (sr.needsTapAgain) {
-      sr.resume()
-      return
-    }
-    if (sr.isListening) {
-      sr.stop()
-      // commit final transcript on stop
-      const text = (sr.finalTranscript || draft || '').trim()
-      if (text) onCommit(text)
-      sr.reset()
-      setDraft('')
-    } else {
-      sr.start()
-    }
-  }
-
+export default function MicButton({ sr, label, size = 'md' }) {
   if (!sr.supported) {
     return (
       <div className="flex flex-col items-center gap-2">
@@ -50,22 +21,25 @@ export default function MicButton({ onCommit, draft, setDraft }) {
     ? sr.error === 'not-allowed' ? 'Mic permission denied — enable in browser settings.'
                                  : `Voice error: ${sr.error}`
     : sr.needsTapAgain ? 'Tap mic to keep listening (iOS limitation)'
-    : sr.isListening   ? 'Listening… tap to save'
-    :                    'Tap to record voice note'
+    : sr.isListening   ? (label?.listening || 'Listening… tap to save')
+    :                    (label?.idle || 'Tap to record voice note')
+
+  const dim = size === 'lg' ? 'w-32 h-32' : 'w-28 h-28'
+  const iconSize = size === 'lg' ? 56 : 48
 
   return (
     <div className="flex flex-col items-center gap-3 select-none">
       <button
-        onClick={tap}
-        className={`relative w-28 h-28 rounded-full flex items-center justify-center transition-transform active:scale-95 border-2
+        onClick={sr.onTap}
+        className={`relative ${dim} rounded-full flex items-center justify-center transition-transform active:scale-95 border-2
           ${sr.isListening
-            ? 'bg-accent-500 border-accent-400 text-ink-950 animate-pulseRing'
+            ? 'bg-accent-500 border-accent-400 text-ink-50 animate-pulseRing'
             : sr.needsTapAgain
-              ? 'bg-amber-500/90 border-amber-400 text-ink-950'
+              ? 'bg-rose-400 border-rose-300 text-ink-950'
               : 'bg-ink-800 border-ink-600 text-ink-100 active:bg-ink-700'}`}
         aria-label={sr.isListening ? 'Stop recording' : 'Start voice note'}
       >
-        <MicIcon size={48} />
+        <MicIcon size={iconSize} />
       </button>
       <div className={`text-sm text-center min-h-[1.25rem] ${sr.error ? 'text-rose-300' : 'text-ink-300'}`}>
         {status}

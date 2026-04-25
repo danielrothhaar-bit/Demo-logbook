@@ -3,26 +3,34 @@ import React, { createContext, useContext, useEffect, useMemo, useReducer, useRe
 const StoreContext = createContext(null)
 
 const DEFAULT_CATEGORIES = [
-  'Puzzle Flow',
-  'Hint Moment',
-  'Friction Point',
-  'Wow Moment',
+  'Game Flow Issue',
+  'Puzzle Logic Issue',
   'Tech Issue',
-  'Theming Gap',
-  'Pacing'
+  'Wow Moment',
+  'Frustration',
+  'Hint',
+  'Clue',
+  'Puzzle Solved',
+  'Feedback Discussion'
 ]
 
 const CATEGORY_COLORS = {
-  'Puzzle Flow':    '#60a5fa',
-  'Hint Moment':    '#fbbf24',
-  'Friction Point': '#f87171',
-  'Wow Moment':     '#34d399',
-  'Tech Issue':     '#f472b6',
-  'Theming Gap':    '#c084fc',
-  'Pacing':         '#22d3ee'
+  'Game Flow Issue':     '#fb923c',
+  'Puzzle Logic Issue':  '#a78bfa',
+  'Tech Issue':          '#f472b6',
+  'Wow Moment':          '#34d399',
+  'Frustration':         '#fb7185',
+  'Hint':                '#fbbf24',
+  'Clue':                '#facc15',
+  'Puzzle Solved':       '#2dd4bf',
+  'Feedback Discussion': '#22d3ee'
 }
 
-const DESIGNERS = [
+// Tags used for negative/positive scoring in synthesis
+export const NEGATIVE_CATEGORIES = new Set(['Game Flow Issue', 'Puzzle Logic Issue', 'Tech Issue', 'Frustration'])
+export const POSITIVE_CATEGORIES = new Set(['Wow Moment', 'Puzzle Solved'])
+
+const DESIGNERS_SEED = [
   { id: 'd1', name: 'Daniel',  initials: 'DR', color: '#f59e0b' },
   { id: 'd2', name: 'Maya',    initials: 'MK', color: '#06b6d4' },
   { id: 'd3', name: 'Sam',     initials: 'SP', color: '#a855f7' }
@@ -37,10 +45,20 @@ const genCode = () => {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
+export const initialsFromName = (name) => {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
 
-// --- Seed data: 3 prior sessions of "The Vault" so trends has substance ---
-const seedSessions = () => {
-  const room = 'The Vault'
+const seedGames = () => ([
+  { id: 'g_vault', name: 'The Vault',          createdAt: Date.now() - 90 * 86400000 },
+  { id: 'g_lab',   name: 'Forgotten Lab',      createdAt: Date.now() - 30 * 86400000 },
+  { id: 'g_attic', name: 'Grandmother\'s Attic', createdAt: Date.now() -  7 * 86400000 }
+])
+
+const seedSessions = (games) => {
   const today = new Date()
   const dateAt = (daysAgo) => {
     const d = new Date(today)
@@ -50,10 +68,12 @@ const seedSessions = () => {
   const mk = (sec, designerId, categories, text) => ({
     id: uid(), timestamp: sec, designerId, categories, text, createdAt: Date.now() - sec * 1000
   })
+  const vault = games.find(g => g.id === 'g_vault')
+  const lab   = games.find(g => g.id === 'g_lab')
   return [
     {
       id: uid(),
-      roomName: room,
+      gameId: vault.id,
       teamSize: 4,
       experience: 'experienced',
       date: dateAt(21),
@@ -63,18 +83,18 @@ const seedSessions = () => {
       timerStartedAt: null,
       ended: true,
       notes: [
-        mk(180,  'd1', ['Puzzle Flow'],     'Team flew through the keypad — too easy?'),
-        mk(645,  'd2', ['Friction Point'],  'Stuck on Puzzle 4 for 3+ minutes, no progress.'),
-        mk(720,  'd1', ['Friction Point'],  'Puzzle 4 is a wall — they have no clue what to do.'),
-        mk(910,  'd3', ['Hint Moment'],     'GM hinted on Puzzle 4 finally.'),
-        mk(1640, 'd2', ['Wow Moment'],      'Vault door opening got an audible gasp.'),
-        mk(2200, 'd1', ['Theming Gap'],     'The fluorescent light by the safe breaks the period feel.'),
-        mk(2900, 'd3', ['Pacing'],          'Final puzzle dragged — energy dropped.'),
+        mk(180,  'd1', ['Game Flow Issue'],     'Team flew through the keypad — too easy?'),
+        mk(645,  'd2', ['Frustration'],         'Stuck on Puzzle 4 for 3+ minutes, no progress.'),
+        mk(720,  'd1', ['Puzzle Logic Issue'],  'Puzzle 4 logic is unclear — they don\'t see the mapping.'),
+        mk(910,  'd3', ['Hint'],                'GM hinted on Puzzle 4 finally.'),
+        mk(1640, 'd2', ['Wow Moment'],          'Vault door opening got an audible gasp.'),
+        mk(2200, 'd1', ['Game Flow Issue'],     'Pacing dipped after the vault — energy dropped.'),
+        mk(2900, 'd3', ['Puzzle Solved'],       'Final lock cracked with 10 seconds to spare.')
       ]
     },
     {
       id: uid(),
-      roomName: room,
+      gameId: vault.id,
       teamSize: 3,
       experience: 'enthusiast',
       date: dateAt(14),
@@ -84,30 +104,30 @@ const seedSessions = () => {
       timerStartedAt: null,
       ended: true,
       notes: [
-        mk(540,  'd1', ['Friction Point'],  'Puzzle 4 — even enthusiasts confused by the symbol mapping.'),
-        mk(610,  'd2', ['Friction Point'],  'P4 again. The symbols on the panel are not legible.'),
-        mk(1300, 'd1', ['Tech Issue'],      'Magnet lock on safe stuck briefly.'),
-        mk(1700, 'd3', ['Wow Moment'],      'Hidden compartment reveal — huge reaction.'),
-        mk(2400, 'd2', ['Theming Gap'],     'Same fluorescent light issue.'),
+        mk(540,  'd1', ['Puzzle Logic Issue'],  'Puzzle 4 — even enthusiasts confused by the symbol mapping.'),
+        mk(610,  'd2', ['Frustration'],         'P4 again. Symbols on the panel are not legible.'),
+        mk(1300, 'd1', ['Tech Issue'],          'Magnet lock on safe stuck briefly.'),
+        mk(1700, 'd3', ['Wow Moment'],          'Hidden compartment reveal — huge reaction.'),
+        mk(2400, 'd2', ['Clue'],                'They missed the riddle clue near the desk for 4 minutes.')
       ]
     },
     {
       id: uid(),
-      roomName: room,
+      gameId: lab.id,
       teamSize: 5,
       experience: 'new',
-      date: dateAt(7),
-      sessionCode: 'VAULT-C77D',
+      date: dateAt(5),
+      sessionCode: 'LAB-77CD',
       timerElapsed: 3600,
       timerRunning: false,
       timerStartedAt: null,
       ended: true,
       notes: [
-        mk(220,  'd1', ['Puzzle Flow'],     'New players took a while to orient — tutorial feels missing.'),
-        mk(720,  'd2', ['Friction Point'],  'Puzzle 4 stuck again. This is a pattern.'),
-        mk(800,  'd3', ['Friction Point'],  'P4 — they tried 6 wrong combos. Mapping is broken.'),
-        mk(1900, 'd1', ['Tech Issue'],      'Audio cue on vault door didn’t fire.'),
-        mk(2600, 'd2', ['Pacing'],          'Pacing improved with bigger team but ending still slow.'),
+        mk(220,  'd1', ['Game Flow Issue'],     'New players took a while to orient — tutorial feels missing.'),
+        mk(720,  'd2', ['Puzzle Logic Issue'],  'Centrifuge puzzle: pattern is too subtle.'),
+        mk(800,  'd3', ['Frustration'],         'They tried 6 wrong combos. Logic is broken.'),
+        mk(1900, 'd1', ['Tech Issue'],          'Audio cue on door didn\'t fire.'),
+        mk(2600, 'd2', ['Wow Moment'],          'The reveal in the back room was great.')
       ]
     }
   ]
@@ -118,25 +138,16 @@ const seedActionItems = (sessions) => [
     id: uid(),
     text: 'Redesign Puzzle 4 symbol mapping for clarity',
     status: 'in_progress',
-    relatedCategory: 'Friction Point',
+    relatedCategory: 'Puzzle Logic Issue',
     relatedKeyword: 'puzzle 4',
-    sourceSessionIds: sessions.slice(0, 3).map(s => s.id),
+    sourceSessionIds: sessions.slice(0, 2).map(s => s.id),
     createdAt: Date.now() - 3 * 86400000
   },
   {
     id: uid(),
-    text: 'Replace fluorescent light near safe with period-correct fixture',
-    status: 'open',
-    relatedCategory: 'Theming Gap',
-    relatedKeyword: 'fluorescent',
-    sourceSessionIds: sessions.slice(0, 2).map(s => s.id),
-    createdAt: Date.now() - 10 * 86400000
-  },
-  {
-    id: uid(),
     text: 'Add an early on-ramp puzzle for new teams',
-    status: 'needs_retest',
-    relatedCategory: 'Puzzle Flow',
+    status: 'open',
+    relatedCategory: 'Game Flow Issue',
     relatedKeyword: 'orient',
     sourceSessionIds: [sessions[2].id],
     createdAt: Date.now() - 5 * 86400000
@@ -144,14 +155,16 @@ const seedActionItems = (sessions) => [
 ]
 
 const initial = (() => {
-  const sessions = seedSessions()
+  const games = seedGames()
+  const sessions = seedSessions(games)
   return {
-    designers: DESIGNERS,
+    designers: [...DESIGNERS_SEED],
     activeDesignerId: 'd1',
     categories: [...DEFAULT_CATEGORIES],
+    games,
     sessions,
     activeSessionId: null,
-    mode: 'home',         // 'home' | 'setup' | 'live' | 'review' | 'trends'
+    mode: 'home',         // 'home' | 'setup' | 'live' | 'review' | 'trends' | 'admin'
     reviewSessionId: null,
     actionItems: seedActionItems(sessions)
   }
@@ -165,10 +178,59 @@ function reducer(state, action) {
       return { ...state, activeDesignerId: action.id }
     case 'SET_CATEGORIES':
       return { ...state, categories: action.categories }
+
+    // Designer CRUD
+    case 'ADD_DESIGNER': {
+      const id = 'd_' + uid()
+      const designer = {
+        id,
+        name: action.name || 'New designer',
+        initials: action.initials || initialsFromName(action.name),
+        color: action.color || '#94a3b8'
+      }
+      return { ...state, designers: [...state.designers, designer] }
+    }
+    case 'UPDATE_DESIGNER': {
+      return {
+        ...state,
+        designers: state.designers.map(d => d.id === action.id ? { ...d, ...action.patch } : d)
+      }
+    }
+    case 'DELETE_DESIGNER': {
+      // Only delete if not in active use
+      const inUse = state.sessions.some(s => s.notes.some(n => n.designerId === action.id))
+      if (inUse) return state
+      const next = { ...state, designers: state.designers.filter(d => d.id !== action.id) }
+      if (next.activeDesignerId === action.id) {
+        next.activeDesignerId = next.designers[0]?.id || null
+      }
+      return next
+    }
+
+    // Game CRUD
+    case 'ADD_GAME': {
+      const id = 'g_' + uid()
+      return {
+        ...state,
+        games: [...state.games, { id, name: action.name.trim(), createdAt: Date.now() }]
+      }
+    }
+    case 'UPDATE_GAME': {
+      return {
+        ...state,
+        games: state.games.map(g => g.id === action.id ? { ...g, ...action.patch } : g)
+      }
+    }
+    case 'DELETE_GAME': {
+      const inUse = state.sessions.some(s => s.gameId === action.id)
+      if (inUse) return state
+      return { ...state, games: state.games.filter(g => g.id !== action.id) }
+    }
+
     case 'CREATE_SESSION': {
       const session = {
         id: uid(),
-        roomName: action.roomName,
+        gameId: action.gameId,
         teamSize: action.teamSize,
         experience: action.experience,
         date: action.date,
@@ -190,6 +252,9 @@ function reducer(state, action) {
       return { ...state, activeSessionId: action.id, mode: 'live' }
     case 'OPEN_SESSION_REVIEW':
       return { ...state, reviewSessionId: action.id, mode: 'review' }
+    case 'UPDATE_SESSION_META': {
+      return mapSession(state, action.sessionId, s => ({ ...s, ...action.patch }))
+    }
     case 'TIMER_START': {
       return mapSession(state, action.sessionId, s => ({
         ...s,
@@ -210,7 +275,6 @@ function reducer(state, action) {
       }))
     }
     case 'TIMER_TICK': {
-      // Just persist current elapsed for an active running session (so refresh isn't lossy)
       return mapSession(state, action.sessionId, s => {
         if (!s.timerRunning || !s.timerStartedAt) return s
         const elapsed = Math.floor((Date.now() - s.timerStartedAt) / 1000)
@@ -232,6 +296,7 @@ function reducer(state, action) {
         categories: action.categories || [],
         text: action.text,
         photoUrl: action.photoUrl || null,
+        kind: action.kind || 'note',
         createdAt: Date.now()
       }
       return mapSession(state, action.sessionId, s => ({ ...s, notes: [...s.notes, note] }))
@@ -272,7 +337,7 @@ function mapSession(state, id, fn) {
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initial)
 
-  // Tick running timer once per second so live displays update
+  // Tick running timer once per second
   const intervalRef = useRef(null)
   useEffect(() => {
     const active = state.sessions.find(s => s.id === state.activeSessionId)
@@ -291,7 +356,10 @@ export function StoreProvider({ children }) {
     activeDesigner: state.designers.find(d => d.id === state.activeDesignerId),
     activeSession: state.sessions.find(s => s.id === state.activeSessionId) || null,
     reviewSession: state.sessions.find(s => s.id === state.reviewSessionId) || null,
-    designerById: (id) => state.designers.find(d => d.id === id)
+    designerById: (id) => state.designers.find(d => d.id === id),
+    gameById: (id) => state.games.find(g => g.id === id),
+    gameName: (id) => state.games.find(g => g.id === id)?.name || '(deleted game)',
+    newestGame: () => [...state.games].sort((a, b) => b.createdAt - a.createdAt)[0] || null
   }), [state])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

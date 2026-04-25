@@ -1,10 +1,15 @@
 import React from 'react'
 import { useStore, fmtTime } from '../store.jsx'
+import FeedbackBreakdown from './FeedbackBreakdown.jsx'
 
 export default function NoteCard({ note, onDelete, dimWhenOther }) {
   const { categoryColor, designerById, state } = useStore()
   const designer = designerById(note.designerId)
   const isMine = note.designerId === state.activeDesignerId
+
+  if (note.kind === 'feedback') {
+    return <FeedbackBreakdown note={note} onDelete={onDelete && isMine ? onDelete : undefined} />
+  }
 
   return (
     <div className={`rounded-2xl p-3 border animate-fadeUp ${

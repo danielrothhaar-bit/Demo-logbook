@@ -19,9 +19,9 @@ export default {
           950: '#070a11'
         },
         accent: {
-          400: '#ffb547',
-          500: '#f59e0b',
-          600: '#d97706'
+          400: '#f87171',
+          500: '#ef4444',
+          600: '#dc2626'
         }
       },
       fontFamily: {
@@ -30,8 +30,8 @@ export default {
       },
       keyframes: {
         pulseRing: {
-          '0%': { boxShadow: '0 0 0 0 rgba(245,158,11,0.55)' },
-          '100%': { boxShadow: '0 0 0 28px rgba(245,158,11,0)' }
+          '0%': { boxShadow: '0 0 0 0 rgba(239,68,68,0.55)' },
+          '100%': { boxShadow: '0 0 0 28px rgba(239,68,68,0)' }
         },
         fadeUp: {
           '0%': { opacity: 0, transform: 'translateY(6px)' },

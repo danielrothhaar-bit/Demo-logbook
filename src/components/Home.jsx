@@ -2,16 +2,16 @@ import React from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 
 export default function Home() {
-  const { state, dispatch, designerById } = useStore()
+  const { state, dispatch, designerById, gameName } = useStore()
 
-  const live    = state.sessions.filter(s => !s.ended)
-  const past    = state.sessions.filter(s => s.ended)
+  const live = state.sessions.filter(s => !s.ended)
+  const past = state.sessions.filter(s => s.ended)
 
   return (
     <div className="px-4 pt-4 space-y-6">
       <button
         onClick={() => dispatch({ type: 'SET_MODE', mode: 'setup' })}
-        className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-950 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
+        className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
       >
         + Start New Playthrough
       </button>
@@ -29,7 +29,7 @@ export default function Home() {
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{s.roomName}</div>
+                    <div className="font-semibold truncate">{gameName(s.gameId)}</div>
                     <div className="text-xs text-ink-400">
                       Code {s.sessionCode} · {s.notes.length} notes
                     </div>
@@ -59,7 +59,7 @@ export default function Home() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{s.roomName}</div>
+                      <div className="font-semibold truncate">{gameName(s.gameId)}</div>
                       <div className="text-xs text-ink-400 mt-0.5">
                         {s.date} · team of {s.teamSize} · {s.experience} · {s.notes.length} notes
                       </div>
@@ -79,16 +79,6 @@ export default function Home() {
             })}
           </div>
         )}
-      </section>
-
-      <section className="pt-2">
-        <button
-          onClick={() => dispatch({ type: 'SET_MODE', mode: 'trends' })}
-          className="w-full rounded-2xl bg-ink-800 border border-ink-700 active:bg-ink-700 p-4 text-left"
-        >
-          <div className="text-sm font-semibold">Cross-session trends →</div>
-          <div className="text-xs text-ink-400 mt-1">Recurring friction, action items, before/after.</div>
-        </button>
       </section>
     </div>
   )

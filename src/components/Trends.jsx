@@ -10,41 +10,55 @@ const STATUSES = [
 ]
 
 export default function Trends() {
-  const { state, dispatch, designerById, categoryColor } = useStore()
-  const rooms = useMemo(() => [...new Set(state.sessions.map(s => s.roomName))], [state.sessions])
-  const [room, setRoom] = useState(rooms[0] || '')
+  const { state, dispatch, designerById, categoryColor, gameById } = useStore()
+  const games = state.games
+  const [gameId, setGameId] = useState(games[0]?.id || '')
 
-  const roomSessions = state.sessions.filter(s => s.roomName === room).sort((a, b) =>
+  if (games.length === 0) {
+    return (
+      <div className="px-4 pt-6">
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
+          <div className="font-semibold mb-1">No games yet</div>
+          <div className="text-sm text-ink-400">Add games in Admin to see trends.</div>
+        </div>
+      </div>
+    )
+  }
+
+  const game = gameById(gameId) || games[0]
+  const gameSessions = state.sessions.filter(s => s.gameId === game.id).sort((a, b) =>
     new Date(a.date).getTime() - new Date(b.date).getTime()
   )
-  const agg = useMemo(() => aggregateAcrossSessions(state.sessions, room), [state.sessions, room])
+  const agg = useMemo(() => aggregateAcrossSessions(state.sessions, game.id), [state.sessions, game.id])
 
   return (
     <div className="px-4 pt-3 space-y-4">
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
-        {rooms.map(r => (
+        {games.map(g => (
           <button
-            key={r}
-            onClick={() => setRoom(r)}
+            key={g.id}
+            onClick={() => setGameId(g.id)}
             className={`px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap ${
-              r === room ? 'bg-accent-500 text-ink-950 border-accent-500' : 'bg-ink-800 border-ink-700 text-ink-200'
+              g.id === game.id ? 'bg-accent-500 text-ink-50 border-accent-500' : 'bg-ink-800 border-ink-700 text-ink-200'
             }`}
-          >{r}</button>
+          >{g.name}</button>
         ))}
       </div>
 
       <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4">
         <div className="flex items-baseline gap-3">
-          <div className="text-3xl font-bold">{roomSessions.length}</div>
-          <div className="text-xs text-ink-400 uppercase tracking-wider">playthroughs of <span className="text-ink-200">{room}</span></div>
+          <div className="text-3xl font-bold">{gameSessions.length}</div>
+          <div className="text-xs text-ink-400 uppercase tracking-wider">playthroughs of <span className="text-ink-200">{game.name}</span></div>
         </div>
-        <div className="text-xs text-ink-400 mt-1">
-          {roomSessions[0]?.date} → {roomSessions[roomSessions.length - 1]?.date}
-        </div>
+        {gameSessions.length > 0 && (
+          <div className="text-xs text-ink-400 mt-1">
+            {gameSessions[0]?.date} → {gameSessions[gameSessions.length - 1]?.date}
+          </div>
+        )}
       </div>
 
       {/* Recurring friction points */}
-      <Section title="Recurring friction" hint="Same minute flagged with friction across multiple sessions.">
+      <Section title="Recurring friction" hint="Same minute flagged across multiple sessions.">
         {agg.recurringFriction.length === 0 ? (
           <Empty text="No recurring friction yet." />
         ) : (
@@ -54,10 +68,10 @@ export default function Trends() {
                 <div className="font-mono text-sm">~{String(b.minute).padStart(2,'0')}:00</div>
                 <div className="text-xs">
                   <span className="font-bold text-rose-300">{b.sessionIds.length}</span>
-                  <span className="text-ink-400"> of {roomSessions.length} playthroughs</span>
+                  <span className="text-ink-400"> of {gameSessions.length} playthroughs</span>
                 </div>
               </div>
-              <RatioBar value={b.sessionIds.length} max={roomSessions.length} color="#f87171" />
+              <RatioBar value={b.sessionIds.length} max={gameSessions.length} color="#f87171" />
               <div className="mt-2 space-y-1.5">
                 {b.notes.slice(0, 3).map(n => {
                   const d = designerById(n.designerId)
@@ -83,18 +97,22 @@ export default function Trends() {
       {/* Category mix */}
       <Section title="Category mix">
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-3">
-          {Object.entries(agg.categoryCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => {
-            const max = Math.max(...Object.values(agg.categoryCounts))
-            return (
-              <div key={cat} className="mb-2 last:mb-0">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span style={{ color: categoryColor(cat) }} className="font-medium">{cat}</span>
-                  <span className="text-ink-400">{count}</span>
+          {Object.keys(agg.categoryCounts).length === 0 ? (
+            <Empty text="No notes yet for this game." />
+          ) : (
+            Object.entries(agg.categoryCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => {
+              const max = Math.max(...Object.values(agg.categoryCounts))
+              return (
+                <div key={cat} className="mb-2 last:mb-0">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span style={{ color: categoryColor(cat) }} className="font-medium">{cat}</span>
+                    <span className="text-ink-400">{count}</span>
+                  </div>
+                  <RatioBar value={count} max={max} color={categoryColor(cat)} />
                 </div>
-                <RatioBar value={count} max={max} color={categoryColor(cat)} />
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </Section>
 
@@ -115,9 +133,7 @@ export default function Trends() {
                     </div>
                   </div>
                 </div>
-                {a.relatedKeyword && (
-                  <BeforeAfter actionItem={a} />
-                )}
+                {a.relatedKeyword && <BeforeAfter actionItem={a} />}
               </div>
             )
           })}
@@ -146,7 +162,6 @@ function StatusPill({ action }) {
 }
 
 function BeforeAfter({ actionItem }) {
-  // Compare friction-note count near the relevant minute, before vs after the latest source session
   const { state } = useStore()
   const before = []
   const after = []
