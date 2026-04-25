@@ -11,17 +11,22 @@ Mobile-first web app for escape room designers to capture observations during li
 
 ## Local development
 
+The app has two processes in dev: Vite for the frontend (`:5173`) and Express for the API/persistence (`:3000`). Vite proxies `/api` to Express.
+
 ```bash
 npm install
-npm run dev      # Vite dev server, http://localhost:5173
+npm run dev:api    # terminal 1 — Express + JSON-file persistence (auto-reloads)
+npm run dev        # terminal 2 — Vite dev server
 ```
 
-Open the URL on your phone — the dev server binds to `0.0.0.0`. For voice input to work in mobile Chrome/Safari, the page must be served over HTTPS *or* visited as `localhost`. Use a tunnel (e.g. `ngrok`, Cloudflare Tunnel) for HTTPS testing on a real phone.
+Open `http://localhost:5173` on your phone (same wifi). For voice input to work on a real phone in Chrome/Safari, the page must be HTTPS *or* `localhost`. Use a tunnel (e.g. `ngrok`, Cloudflare Tunnel) when testing voice on a phone.
 
 ```bash
-npm run build    # production bundle into ./dist
-npm start        # runs Express server serving ./dist (uses $PORT)
+npm run build      # production bundle into ./dist
+npm start          # Express serves ./dist + the API
 ```
+
+In dev, persisted state lives in `./data/state.json` (gitignored). Delete that file to reset to seeded data.
 
 ## Modes
 
@@ -49,6 +54,29 @@ This repo is Railway-ready out of the box.
 5. Set a custom domain in **Settings → Networking → Custom Domain** if desired.
 
 `railway.json` and `nixpacks.toml` pin the build/start commands so the deploy is deterministic.
+
+### Persistent storage (volume)
+
+By default the server writes to `./data/state.json`. On Railway you'll lose that on every redeploy unless you mount a volume. To persist data across deploys *and* share it between every device that visits the URL:
+
+1. **Service → Settings → Storage → New Volume**
+2. Mount path: `/data`
+3. Suggested size: 1 GB (enough for thousands of notes; photos are stored base64-encoded inline so they take more)
+4. **Variables tab → New Variable** → `DATA_DIR` = `/data`
+5. Trigger a redeploy
+
+That's it. Every browser/device that loads your Railway URL hits the same `/data/state.json`, so notes appear in real-time across all of them via Server-Sent Events.
+
+To inspect or back up the state file:
+```bash
+railway run --service <service> -- cat /data/state.json > backup.json
+```
+
+To wipe and re-seed:
+```bash
+railway run --service <service> -- rm /data/state.json
+# then restart the service
+```
 
 ## What's *not* in this prototype
 

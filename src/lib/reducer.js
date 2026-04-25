@@ -1,0 +1,349 @@
+// Pure reducer + seeds. No React imports — must be importable from both
+// the Vite client bundle AND the Node server.
+
+export const DEFAULT_CATEGORIES = [
+  'Game Flow Issue',
+  'Puzzle Logic Issue',
+  'Tech Issue',
+  'Wow Moment',
+  'Frustration',
+  'Hint',
+  'Clue',
+  'Puzzle Solved',
+  'Feedback Discussion'
+]
+
+export const CATEGORY_COLORS = {
+  'Game Flow Issue':     '#fb923c',
+  'Puzzle Logic Issue':  '#a78bfa',
+  'Tech Issue':          '#f472b6',
+  'Wow Moment':          '#34d399',
+  'Frustration':         '#fb7185',
+  'Hint':                '#fbbf24',
+  'Clue':                '#facc15',
+  'Puzzle Solved':       '#2dd4bf',
+  'Feedback Discussion': '#22d3ee'
+}
+
+export const NEGATIVE_CATEGORIES = new Set(['Game Flow Issue', 'Puzzle Logic Issue', 'Tech Issue', 'Frustration'])
+export const POSITIVE_CATEGORIES = new Set(['Wow Moment', 'Puzzle Solved'])
+
+const DESIGNERS_SEED = [
+  { id: 'd1', name: 'Daniel',  initials: 'DR', color: '#f59e0b' },
+  { id: 'd2', name: 'Maya',    initials: 'MK', color: '#06b6d4' },
+  { id: 'd3', name: 'Sam',     initials: 'SP', color: '#a855f7' }
+]
+
+// ------- Helpers (exported so the client wrapper can pre-generate IDs) -------
+
+export const uid = () => Math.random().toString(36).slice(2, 10)
+
+export function genCode() {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const digits = '23456789'
+  const pick = (s, n) => Array.from({ length: n }, () => s[Math.floor(Math.random() * s.length)]).join('')
+  return `${pick(letters, 4)}-${pick(digits, 2)}${pick(letters, 1)}${pick(digits, 1)}`
+}
+
+export function initialsFromName(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// ------- Seed factories -------
+
+function seedGames() {
+  const now = Date.now()
+  return [
+    { id: 'g_vault', name: 'The Vault',            createdAt: now - 90 * 86400000 },
+    { id: 'g_lab',   name: 'Forgotten Lab',        createdAt: now - 30 * 86400000 },
+    { id: 'g_attic', name: "Grandmother's Attic",  createdAt: now -  7 * 86400000 }
+  ]
+}
+
+function seedSessions(games) {
+  const dateAt = (daysAgo) => {
+    const d = new Date()
+    d.setDate(d.getDate() - daysAgo)
+    return d.toISOString().slice(0, 10)
+  }
+  const mk = (sec, designerId, categories, text) => ({
+    id: uid(), timestamp: sec, designerId, categories, text, createdAt: Date.now() - sec * 1000
+  })
+  const vault = games.find(g => g.id === 'g_vault')
+  const lab   = games.find(g => g.id === 'g_lab')
+  return [
+    {
+      id: uid(), gameId: vault.id, teamSize: 4, experience: 'experienced',
+      date: dateAt(21), sessionCode: 'VAULT-A12B',
+      timerElapsed: 3580, timerRunning: false, timerStartedAt: null, ended: true,
+      notes: [
+        mk(180,  'd1', ['Game Flow Issue'],     'Team flew through the keypad — too easy?'),
+        mk(645,  'd2', ['Frustration'],         'Stuck on Puzzle 4 for 3+ minutes, no progress.'),
+        mk(720,  'd1', ['Puzzle Logic Issue'],  "Puzzle 4 logic is unclear — they don't see the mapping."),
+        mk(910,  'd3', ['Hint'],                'GM hinted on Puzzle 4 finally.'),
+        mk(1640, 'd2', ['Wow Moment'],          'Vault door opening got an audible gasp.'),
+        mk(2200, 'd1', ['Game Flow Issue'],     'Pacing dipped after the vault — energy dropped.'),
+        mk(2900, 'd3', ['Puzzle Solved'],       'Final lock cracked with 10 seconds to spare.')
+      ]
+    },
+    {
+      id: uid(), gameId: vault.id, teamSize: 3, experience: 'enthusiast',
+      date: dateAt(14), sessionCode: 'VAULT-B41C',
+      timerElapsed: 3200, timerRunning: false, timerStartedAt: null, ended: true,
+      notes: [
+        mk(540,  'd1', ['Puzzle Logic Issue'],  'Puzzle 4 — even enthusiasts confused by the symbol mapping.'),
+        mk(610,  'd2', ['Frustration'],         'P4 again. Symbols on the panel are not legible.'),
+        mk(1300, 'd1', ['Tech Issue'],          'Magnet lock on safe stuck briefly.'),
+        mk(1700, 'd3', ['Wow Moment'],          'Hidden compartment reveal — huge reaction.'),
+        mk(2400, 'd2', ['Clue'],                'They missed the riddle clue near the desk for 4 minutes.')
+      ]
+    },
+    {
+      id: uid(), gameId: lab.id, teamSize: 5, experience: 'new',
+      date: dateAt(5), sessionCode: 'LAB-77CD',
+      timerElapsed: 3600, timerRunning: false, timerStartedAt: null, ended: true,
+      notes: [
+        mk(220,  'd1', ['Game Flow Issue'],     'New players took a while to orient — tutorial feels missing.'),
+        mk(720,  'd2', ['Puzzle Logic Issue'],  'Centrifuge puzzle: pattern is too subtle.'),
+        mk(800,  'd3', ['Frustration'],         'They tried 6 wrong combos. Logic is broken.'),
+        mk(1900, 'd1', ['Tech Issue'],          "Audio cue on door didn't fire."),
+        mk(2600, 'd2', ['Wow Moment'],          'The reveal in the back room was great.')
+      ]
+    }
+  ]
+}
+
+function seedActionItems(sessions) {
+  return [
+    {
+      id: uid(),
+      text: 'Redesign Puzzle 4 symbol mapping for clarity',
+      status: 'in_progress',
+      relatedCategory: 'Puzzle Logic Issue',
+      relatedKeyword: 'puzzle 4',
+      sourceSessionIds: sessions.slice(0, 2).map(s => s.id),
+      createdAt: Date.now() - 3 * 86400000
+    },
+    {
+      id: uid(),
+      text: 'Add an early on-ramp puzzle for new teams',
+      status: 'open',
+      relatedCategory: 'Game Flow Issue',
+      relatedKeyword: 'orient',
+      sourceSessionIds: sessions[2] ? [sessions[2].id] : [],
+      createdAt: Date.now() - 5 * 86400000
+    }
+  ]
+}
+
+// ------- Initial state -------
+
+// Persisted slice: what the server keeps in the volume.
+export const PERSISTED_KEYS = ['designers', 'categories', 'games', 'sessions', 'actionItems']
+
+export function initialPersistedState() {
+  const games = seedGames()
+  const sessions = seedSessions(games)
+  return {
+    designers: [...DESIGNERS_SEED],
+    categories: [...DEFAULT_CATEGORIES],
+    games,
+    sessions,
+    actionItems: seedActionItems(sessions)
+  }
+}
+
+// Full state (persisted slice + UI state) — used on the client.
+export function initialState() {
+  return {
+    ...initialPersistedState(),
+    activeDesignerId: 'd1',
+    activeSessionId: null,
+    reviewSessionId: null,
+    mode: 'home',
+    hydrated: false
+  }
+}
+
+export function pickPersistedSlice(state) {
+  const out = {}
+  for (const k of PERSISTED_KEYS) out[k] = state[k]
+  return out
+}
+
+// ------- Reducer -------
+
+function mapSession(state, id, fn) {
+  return { ...state, sessions: state.sessions.map(s => s.id === id ? fn(s) : s) }
+}
+
+// Actions that should never sync to the server (UI / per-device state).
+export const CLIENT_ONLY_ACTIONS = new Set([
+  'SET_MODE',
+  'OPEN_SESSION_LIVE',
+  'OPEN_SESSION_REVIEW',
+  'SET_ACTIVE_DESIGNER',
+  'TIMER_TICK',
+  '@@HYDRATE'
+])
+
+export function reducer(state, action) {
+  switch (action.type) {
+    // Client-only UI actions
+    case 'SET_MODE':              return { ...state, mode: action.mode }
+    case 'SET_ACTIVE_DESIGNER':   return { ...state, activeDesignerId: action.id }
+    case 'OPEN_SESSION_LIVE':     return { ...state, activeSessionId: action.id, mode: 'live' }
+    case 'OPEN_SESSION_REVIEW':   return { ...state, reviewSessionId: action.id, mode: 'review' }
+    case 'TIMER_TICK': {
+      return mapSession(state, action.sessionId, s => {
+        if (!s.timerRunning || !s.timerStartedAt) return s
+        const elapsed = Math.floor((Date.now() - s.timerStartedAt) / 1000)
+        return { ...s, timerElapsed: elapsed }
+      })
+    }
+
+    // Hydration: replace the persisted slice from a server fetch.
+    case '@@HYDRATE': {
+      const next = { ...state, hydrated: true }
+      for (const k of PERSISTED_KEYS) {
+        if (action.state[k] !== undefined) next[k] = action.state[k]
+      }
+      // If active designer was deleted on another device, fall back to the first one
+      if (!next.designers.some(d => d.id === next.activeDesignerId)) {
+        next.activeDesignerId = next.designers[0]?.id || null
+      }
+      return next
+    }
+
+    // Persisted actions
+    case 'SET_CATEGORIES':
+      return { ...state, categories: action.categories }
+
+    case 'ADD_DESIGNER': {
+      const id = action.id || ('d_' + uid())
+      const designer = {
+        id,
+        name: action.name || 'New designer',
+        initials: action.initials || initialsFromName(action.name),
+        color: action.color || '#94a3b8'
+      }
+      return { ...state, designers: [...state.designers, designer] }
+    }
+    case 'UPDATE_DESIGNER':
+      return { ...state, designers: state.designers.map(d => d.id === action.id ? { ...d, ...action.patch } : d) }
+    case 'DELETE_DESIGNER': {
+      const inUse = state.sessions.some(s => s.notes.some(n => n.designerId === action.id))
+      if (inUse) return state
+      const next = { ...state, designers: state.designers.filter(d => d.id !== action.id) }
+      if (next.activeDesignerId === action.id) next.activeDesignerId = next.designers[0]?.id || null
+      return next
+    }
+
+    case 'ADD_GAME': {
+      const id = action.id || ('g_' + uid())
+      return { ...state, games: [...state.games, { id, name: action.name.trim(), createdAt: action.createdAt || Date.now() }] }
+    }
+    case 'UPDATE_GAME':
+      return { ...state, games: state.games.map(g => g.id === action.id ? { ...g, ...action.patch } : g) }
+    case 'DELETE_GAME': {
+      const inUse = state.sessions.some(s => s.gameId === action.id)
+      if (inUse) return state
+      return { ...state, games: state.games.filter(g => g.id !== action.id) }
+    }
+
+    case 'CREATE_SESSION': {
+      const session = {
+        id: action.id || uid(),
+        gameId: action.gameId,
+        teamSize: action.teamSize,
+        experience: action.experience,
+        date: action.date,
+        sessionCode: action.sessionCode || genCode(),
+        timerElapsed: 0,
+        timerRunning: false,
+        timerStartedAt: null,
+        ended: false,
+        notes: []
+      }
+      return {
+        ...state,
+        sessions: [session, ...state.sessions],
+        activeSessionId: session.id,
+        mode: 'live'
+      }
+    }
+    case 'UPDATE_SESSION_META':
+      return mapSession(state, action.sessionId, s => ({ ...s, ...action.patch }))
+    case 'TIMER_START':
+      return mapSession(state, action.sessionId, s => ({
+        ...s, timerRunning: true,
+        timerStartedAt: action.startedAt || (Date.now() - s.timerElapsed * 1000)
+      }))
+    case 'TIMER_PAUSE':
+      return mapSession(state, action.sessionId, s => {
+        if (!s.timerRunning) return s
+        const elapsed = action.elapsed != null
+          ? action.elapsed
+          : Math.floor((Date.now() - s.timerStartedAt) / 1000)
+        return { ...s, timerRunning: false, timerElapsed: elapsed, timerStartedAt: null }
+      })
+    case 'TIMER_RESET':
+      return mapSession(state, action.sessionId, s => ({
+        ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null
+      }))
+    case 'END_SESSION':
+      return mapSession(state, action.sessionId, s => ({
+        ...s,
+        ended: true,
+        timerRunning: false,
+        timerElapsed: action.elapsed != null
+          ? action.elapsed
+          : (s.timerRunning && s.timerStartedAt ? Math.floor((Date.now() - s.timerStartedAt) / 1000) : s.timerElapsed),
+        timerStartedAt: null
+      }))
+
+    case 'ADD_NOTE': {
+      const note = {
+        id: action.id || uid(),
+        timestamp: action.timestamp,
+        designerId: action.designerId,
+        categories: action.categories || [],
+        text: action.text,
+        photoUrl: action.photoUrl || null,
+        kind: action.kind || 'note',
+        createdAt: action.createdAt || Date.now()
+      }
+      return mapSession(state, action.sessionId, s => ({ ...s, notes: [...s.notes, note] }))
+    }
+    case 'UPDATE_NOTE':
+      return mapSession(state, action.sessionId, s => ({
+        ...s, notes: s.notes.map(n => n.id === action.noteId ? { ...n, ...action.patch } : n)
+      }))
+    case 'DELETE_NOTE':
+      return mapSession(state, action.sessionId, s => ({
+        ...s, notes: s.notes.filter(n => n.id !== action.noteId)
+      }))
+
+    case 'ADD_ACTION_ITEM':
+      return {
+        ...state,
+        actionItems: [{
+          id: action.item.id || uid(),
+          createdAt: action.item.createdAt || Date.now(),
+          status: 'open',
+          ...action.item
+        }, ...state.actionItems]
+      }
+    case 'UPDATE_ACTION_ITEM':
+      return {
+        ...state,
+        actionItems: state.actionItems.map(a => a.id === action.id ? { ...a, ...action.patch } : a)
+      }
+
+    default:
+      return state
+  }
+}
