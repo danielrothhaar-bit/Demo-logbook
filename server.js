@@ -24,28 +24,33 @@ function loadInitial() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8')
     const parsed = JSON.parse(raw)
-    // Validate shape — fall through to seed if invalid
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.sessions)) {
+    // New format: { slice, version }
+    if (parsed && parsed.slice && typeof parsed.version === 'number') {
       return parsed
+    }
+    // Backward compat: old format was just the slice
+    if (parsed && Array.isArray(parsed.sessions)) {
+      return { slice: parsed, version: 1 }
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
       console.warn('Could not read existing state file, seeding fresh:', err.message)
     }
   }
-  const seeded = initialPersistedState()
-  persistSlice(seeded)
+  const seeded = { slice: initialPersistedState(), version: 1 }
+  persistAll(seeded.slice, seeded.version)
   return seeded
 }
 
-function persistSlice(slice) {
+function persistAll(slice, version) {
   const tmp = STATE_FILE + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(slice))
+  fs.writeFileSync(tmp, JSON.stringify({ slice, version }))
   fs.renameSync(tmp, STATE_FILE)
 }
 
-let currentSlice = loadInitial()
-let currentVersion = 1
+const loaded = loadInitial()
+let currentSlice = loaded.slice
+let currentVersion = loaded.version
 
 console.log(`[demo-logbook] persisting to ${STATE_FILE}`)
 console.log(`[demo-logbook] loaded ${currentSlice.sessions.length} sessions, ${currentSlice.games.length} games`)
@@ -69,7 +74,7 @@ function applyAction(action) {
 
   currentSlice = nextSlice
   currentVersion += 1
-  persistSlice(currentSlice)
+  persistAll(currentSlice, currentVersion)
   return true
 }
 

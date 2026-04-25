@@ -115,14 +115,31 @@ async function getState() {
   return r.json()
 }
 
-async function dispatch(action) {
-  const r = await fetch(BASE + '/api/actions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action })
-  })
-  if (!r.ok) throw new Error('POST ' + r.status + ' for ' + JSON.stringify(action).slice(0, 80))
-  return r.json()
+// Retry with exponential backoff on transient failures (502/503/504/network).
+async function dispatch(action, attempt = 1) {
+  try {
+    const r = await fetch(BASE + '/api/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action })
+    })
+    if (r.ok) return await r.json()
+    if (attempt <= 5 && [502, 503, 504, 429].includes(r.status)) {
+      const delay = 500 * Math.pow(2, attempt - 1)
+      console.log(`\n  ↻ ${r.status}, retry ${attempt} in ${delay}ms`)
+      await new Promise(res => setTimeout(res, delay))
+      return dispatch(action, attempt + 1)
+    }
+    throw new Error('POST ' + r.status + ' for ' + JSON.stringify(action).slice(0, 80))
+  } catch (e) {
+    if (attempt <= 5 && (e.code === 'ECONNRESET' || e.message.includes('fetch failed'))) {
+      const delay = 500 * Math.pow(2, attempt - 1)
+      console.log(`\n  ↻ ${e.message}, retry ${attempt} in ${delay}ms`)
+      await new Promise(res => setTimeout(res, delay))
+      return dispatch(action, attempt + 1)
+    }
+    throw e
+  }
 }
 
 const main = async () => {
