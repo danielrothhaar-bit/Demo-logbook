@@ -402,16 +402,16 @@ function ReviewHeader({ session, totalSec }) {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Date</div>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+              className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time</div>
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={1800}
-              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+              className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
         </div>
 
@@ -675,28 +675,12 @@ function Synthesis({ consensus, divergence, duplicates }) {
 }
 
 function Summary({ summary, session }) {
-  const { dispatch } = useStore()
-
-  const promote = (a) => {
-    dispatch({
-      type: 'ADD_ACTION_ITEM',
-      item: {
-        text: a.text,
-        relatedCategory: a.relatedCategory,
-        relatedKeyword: '',
-        sourceSessionIds: [session.id]
-      }
-    })
-    alert('Added to action items (Trends tab).')
-  }
-
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-gradient-to-br from-accent-500/15 to-emerald-500/10 border border-accent-500/30 p-4">
         <div className="text-xs uppercase tracking-wider text-accent-400 mb-1">Auto-summary</div>
         <div className="text-sm text-ink-200">
           Heuristic synthesis of {session.notes.length} notes from this demo.
-          Action items can be promoted to the cross-demo tracker.
         </div>
       </div>
 
@@ -714,26 +698,6 @@ function Summary({ summary, session }) {
           summary.wins.map((w, idx) => (
             <SummaryRow key={idx} index={idx + 1} text={w.text}
               meta={`${fmtTime(w.timestamp)} · ${w.category}${w.designerCount > 1 ? ` · ${w.designerCount} designers agree` : ''}`} positive />
-          ))
-        }
-      </Section>
-
-      <Section title="Suggested action items" hint="Ranked by how many designers flagged related notes.">
-        {summary.actions.length === 0 ? <Empty text="No actions suggested." /> :
-          summary.actions.map((a, idx) => (
-            <div key={idx} className="rounded-2xl bg-ink-800 border border-ink-700 p-3 flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-accent-500 text-ink-50 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                {idx + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-ink-100 leading-snug">{a.text}</div>
-                <div className="text-[11px] text-ink-400 mt-1">
-                  Ranked {a.rank > 1 ? `${a.rank} designers agreed` : 'single source'}
-                </div>
-              </div>
-              <button onClick={() => promote(a)}
-                className="text-xs px-2.5 py-1.5 rounded-lg bg-ink-700 active:bg-ink-600 text-ink-100">+ Track</button>
-            </div>
           ))
         }
       </Section>

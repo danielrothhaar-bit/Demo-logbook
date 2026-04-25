@@ -325,32 +325,102 @@ export function analyzeFeedback(transcript) {
 
 // ---- Cross-session aggregation ----
 
+/**
+ * Aggregate across all demos for one game (or all games if gameId is null).
+ *
+ * Returns:
+ *   {
+ *     total:           number — count of demos
+ *     totalDuration:   number — sum of timer-elapsed seconds
+ *     avgDuration:     number
+ *     totalNotes:      number
+ *     avgNotesPerDemo: number
+ *     dateRange:       { from, to }
+ *     categoryCounts:  { [category]: count }
+ *     puzzleStats:     { [puzzleId]: { total, negative, positive, neutral, demos, perCategory, notes } }
+ *     componentStats:  same shape, keyed by componentId
+ *   }
+ *
+ * negative = note has any NEGATIVE-set category. positive = any POSITIVE-set category.
+ * neutral = total − negative − positive (a single note that's both negative and positive
+ * counts in both buckets but contributes 0 to neutral).
+ */
 export function aggregateAcrossSessions(sessions, gameId) {
   const relevant = gameId ? sessions.filter(s => s.gameId === gameId) : sessions
   const total = relevant.length
-  if (!total) return { total: 0, recurringFriction: [], categoryCounts: {} }
-
-  // Recurring friction: cluster friction notes across sessions by minute
-  const frictionByMinute = {}
-  const categoryCounts = {}
-  for (const sess of relevant) {
-    for (const n of sess.notes) {
-      if (n.kind === 'feedback') continue
-      for (const c of n.categories || []) {
-        categoryCounts[c] = (categoryCounts[c] || 0) + 1
-      }
-      if (!n.categories?.some(c => NEGATIVE.has(c))) continue
-      const minute = Math.floor(n.timestamp / 60)
-      const key = `${minute}`
-      frictionByMinute[key] = frictionByMinute[key] || { minute, sessionIds: new Set(), notes: [] }
-      frictionByMinute[key].sessionIds.add(sess.id)
-      frictionByMinute[key].notes.push({ ...n, sessionId: sess.id })
+  if (!total) {
+    return {
+      total: 0, totalDuration: 0, avgDuration: 0,
+      totalNotes: 0, avgNotesPerDemo: 0,
+      dateRange: null,
+      categoryCounts: {}, puzzleStats: {}, componentStats: {}
     }
   }
-  const recurringFriction = Object.values(frictionByMinute)
-    .map(b => ({ ...b, sessionIds: [...b.sessionIds] }))
-    .filter(b => b.sessionIds.length >= 2)
-    .sort((a, b) => b.sessionIds.length - a.sessionIds.length)
 
-  return { total, recurringFriction, categoryCounts }
+  const categoryCounts = {}
+  const puzzleStats = {}
+  const componentStats = {}
+  let totalDuration = 0
+  let totalNotes = 0
+  const dates = []
+
+  const ensure = (bucket, id) => {
+    if (!bucket[id]) {
+      bucket[id] = {
+        total: 0, negative: 0, positive: 0,
+        demos: new Set(),
+        perCategory: {},
+        notes: []
+      }
+    }
+    return bucket[id]
+  }
+
+  for (const sess of relevant) {
+    totalDuration += sess.timerElapsed || 0
+    if (sess.date) dates.push(sess.date)
+
+    for (const n of sess.notes) {
+      if (n.kind === 'feedback') continue
+      totalNotes++
+      const cats = n.categories || []
+      for (const c of cats) categoryCounts[c] = (categoryCounts[c] || 0) + 1
+      const isNeg = cats.some(c => NEGATIVE.has(c))
+      const isPos = cats.some(c => POSITIVE.has(c))
+
+      const tag = (bucket, id) => {
+        const e = ensure(bucket, id)
+        e.total++
+        if (isNeg) e.negative++
+        if (isPos) e.positive++
+        e.demos.add(sess.id)
+        for (const c of cats) e.perCategory[c] = (e.perCategory[c] || 0) + 1
+        e.notes.push({ ...n, sessionId: sess.id, sessionDate: sess.date })
+      }
+
+      for (const pid of (n.puzzleIds    || [])) tag(puzzleStats,    pid)
+      for (const cid of (n.componentIds || [])) tag(componentStats, cid)
+    }
+  }
+
+  // Convert demo sets → counts
+  for (const k of Object.keys(puzzleStats)) {
+    puzzleStats[k].demos = puzzleStats[k].demos.size
+  }
+  for (const k of Object.keys(componentStats)) {
+    componentStats[k].demos = componentStats[k].demos.size
+  }
+
+  dates.sort()
+  return {
+    total,
+    totalDuration,
+    avgDuration: Math.round(totalDuration / total),
+    totalNotes,
+    avgNotesPerDemo: Math.round((totalNotes / total) * 10) / 10,
+    dateRange: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null,
+    categoryCounts,
+    puzzleStats,
+    componentStats
+  }
 }

@@ -273,6 +273,7 @@ function GameRow({ game, isNewest }) {
             onAdd={(name, code) => dispatch({ type: 'ADD_PUZZLE', gameId: game.id, name, code })}
             onUpdate={(id, patch) => dispatch({ type: 'UPDATE_PUZZLE', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_PUZZLE', gameId: game.id, id })}
+            onReorder={(next) => dispatch({ type: 'UPDATE_GAME', id: game.id, patch: { puzzles: next } })}
           />
           <NamedItemList
             title="Components"
@@ -281,6 +282,7 @@ function GameRow({ game, isNewest }) {
             onAdd={(name, code) => dispatch({ type: 'ADD_COMPONENT', gameId: game.id, name, code })}
             onUpdate={(id, patch) => dispatch({ type: 'UPDATE_COMPONENT', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_COMPONENT', gameId: game.id, id })}
+            onReorder={(next) => dispatch({ type: 'UPDATE_GAME', id: game.id, patch: { components: next } })}
           />
         </div>
       )}
@@ -288,7 +290,7 @@ function GameRow({ game, isNewest }) {
   )
 }
 
-function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete }) {
+function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete, onReorder }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const add = () => {
@@ -299,13 +301,23 @@ function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete }) {
     setName('')
     setCode('')
   }
+  const move = (i, dir) => {
+    const j = i + dir
+    if (j < 0 || j >= items.length) return
+    const next = [...items]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    onReorder(next)
+  }
   return (
     <div>
       <div className="text-xs uppercase tracking-wider text-ink-400">{title}</div>
       {hint && <div className="text-[11px] text-ink-500 mb-2">{hint}</div>}
       <div className="space-y-1.5">
-        {items.map(item => (
+        {items.map((item, i) => (
           <NamedItemRow key={item.id} item={item}
+            canUp={i > 0} canDown={i < items.length - 1}
+            onMoveUp={() => move(i, -1)}
+            onMoveDown={() => move(i, 1)}
             onSave={(patch) => onUpdate(item.id, patch)}
             onDelete={() => { if (confirm(`Delete "${item.name}"?`)) onDelete(item.id) }} />
         ))}
@@ -317,14 +329,14 @@ function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete }) {
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
           placeholder="Code (optional)"
-          className="w-28 bg-ink-800 border border-ink-700 rounded-lg px-2 py-2 outline-none focus:border-accent-500 text-sm font-mono"
+          className="w-24 bg-ink-800 border border-ink-700 rounded-lg px-2 py-2 outline-none focus:border-accent-500 text-sm font-mono"
         />
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
           placeholder={`Add ${title.toLowerCase().replace(/s$/, '')}…`}
-          className="flex-1 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 text-sm"
+          className="flex-1 min-w-0 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 text-sm"
         />
         <button onClick={add} disabled={!name.trim()}
           className="px-3 rounded-lg bg-ink-700 active:bg-ink-600 disabled:opacity-30 text-sm">Add</button>
@@ -333,7 +345,7 @@ function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete }) {
   )
 }
 
-function NamedItemRow({ item, onSave, onDelete }) {
+function NamedItemRow({ item, canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(item.name)
   const [code, setCode] = useState(item.code || '')
@@ -347,25 +359,29 @@ function NamedItemRow({ item, onSave, onDelete }) {
     return (
       <div className="flex items-center gap-2 bg-ink-800 border border-accent-500 rounded-lg px-2 py-1">
         <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code"
-          className="w-24 bg-transparent outline-none text-sm font-mono" />
+          className="w-20 bg-transparent outline-none text-sm font-mono" />
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          className="flex-1 bg-transparent outline-none text-sm" />
+          className="flex-1 min-w-0 bg-transparent outline-none text-sm" />
         <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2">Cancel</button>
         <button onClick={save} className="text-xs px-2 py-1 rounded-md bg-accent-500 text-ink-50 font-semibold">Save</button>
       </div>
     )
   }
   return (
-    <div className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-lg pl-2 pr-1 py-1">
+    <div className="flex items-center gap-1.5 bg-ink-800 border border-ink-700 rounded-lg pl-1 pr-1 py-1">
+      <button onClick={onMoveUp} disabled={!canUp}
+        className="w-7 h-7 rounded-md text-ink-400 active:bg-ink-700 disabled:opacity-20 flex-shrink-0">↑</button>
+      <button onClick={onMoveDown} disabled={!canDown}
+        className="w-7 h-7 rounded-md text-ink-400 active:bg-ink-700 disabled:opacity-20 flex-shrink-0">↓</button>
       {item.code && (
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-ink-300 border border-ink-700">
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-ink-300 border border-ink-700 flex-shrink-0">
           {item.code}
         </span>
       )}
-      <span className="flex-1 text-sm">{item.name}</span>
-      <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2">Edit</button>
-      <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30">✕</button>
+      <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
+      <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2 flex-shrink-0">Edit</button>
+      <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30 flex-shrink-0">✕</button>
     </div>
   )
 }
@@ -374,41 +390,41 @@ function NamedItemRow({ item, onSave, onDelete }) {
 
 function TagsPanel() {
   const { state, dispatch, categoryColor } = useStore()
-  const [list, setList] = useState(state.categories)
   const [draft, setDraft] = useState('')
 
-  const dirty = JSON.stringify(list) !== JSON.stringify(state.categories)
+  // Every change persists immediately — no separate Save step
+  const setList = (next) => dispatch({ type: 'SET_CATEGORIES', categories: next })
 
   const add = () => {
     const v = draft.trim()
-    if (!v || list.includes(v)) return
-    setList([...list, v])
+    if (!v || state.categories.includes(v)) return
+    setList([...state.categories, v])
     setDraft('')
   }
-  const remove = (c) => setList(list.filter(x => x !== c))
+  const remove = (c) => setList(state.categories.filter(x => x !== c))
   const move = (i, dir) => {
     const j = i + dir
-    if (j < 0 || j >= list.length) return
-    const next = [...list]
+    if (j < 0 || j >= state.categories.length) return
+    const next = [...state.categories]
     ;[next[i], next[j]] = [next[j], next[i]]
     setList(next)
   }
-  const save = () => dispatch({ type: 'SET_CATEGORIES', categories: list })
 
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-ink-500 px-1">
         Tags appear as quick-buttons during live logging. Voice notes that mention these phrases auto-tag.
+        Changes save instantly.
       </div>
 
       <div className="space-y-2">
-        {list.map((c, i) => (
+        {state.categories.map((c, i) => (
           <div key={c} className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-xl pl-3 pr-1 py-1">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: categoryColor(c) }} />
-            <span className="flex-1">{c}</span>
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: categoryColor(c) }} />
+            <span className="flex-1 truncate">{c}</span>
             <button onClick={() => move(i, -1)} disabled={i === 0}
               className="w-9 h-9 rounded-lg active:bg-ink-700 disabled:opacity-30">↑</button>
-            <button onClick={() => move(i, 1)} disabled={i === list.length - 1}
+            <button onClick={() => move(i, 1)} disabled={i === state.categories.length - 1}
               className="w-9 h-9 rounded-lg active:bg-ink-700 disabled:opacity-30">↓</button>
             <button onClick={() => remove(c)}
               className="w-9 h-9 rounded-lg active:bg-rose-900/40 text-rose-300">✕</button>
@@ -424,15 +440,11 @@ function TagsPanel() {
           placeholder="New tag…"
           className="flex-1 bg-ink-800 border border-ink-700 rounded-xl px-3 py-2.5 outline-none focus:border-accent-500"
         />
-        <button onClick={add} className="px-4 rounded-xl bg-ink-700 active:bg-ink-600">Add</button>
-      </div>
-
-      {dirty && (
-        <button onClick={save}
-          className="w-full py-3.5 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-bold">
-          Save changes
+        <button onClick={add} disabled={!draft.trim()}
+          className="px-4 rounded-xl bg-accent-500 active:bg-accent-600 disabled:opacity-30 text-ink-50 font-semibold">
+          Add
         </button>
-      )}
+      </div>
     </div>
   )
 }

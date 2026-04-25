@@ -107,25 +107,29 @@ export default function SessionSetup() {
         </div>
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Date">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
-          />
-        </Field>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="min-w-0">
+          <Field label="Date">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full max-w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
+            />
+          </Field>
+        </div>
 
-        <Field label="Time">
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            step={1800}
-            className="w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
-          />
-        </Field>
+        <div className="min-w-0">
+          <Field label="Time">
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              step={1800}
+              className="w-full max-w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
+            />
+          </Field>
+        </div>
       </div>
 
       <div className="pt-2 flex gap-3">
