@@ -31,6 +31,10 @@ function fillIdsForSync(action) {
 export function StoreProvider({ children }) {
   const [state, baseDispatch] = useReducer(reducer, undefined, initialState)
   const versionRef = useRef(0)
+  // Mirror state in a ref so the stable dispatch callback can read it without
+  // re-binding (used to pre-compute Date.now()-derived fields).
+  const stateRef = useRef(state)
+  useEffect(() => { stateRef.current = state }, [state])
 
   // ---- Bootstrap from server ----
   useEffect(() => {
@@ -70,7 +74,22 @@ export function StoreProvider({ children }) {
 
   // ---- Wrapped dispatch: optimistic local apply + POST persisted actions ----
   const dispatch = useCallback((action) => {
-    const filled = fillIdsForSync(action)
+    let filled = fillIdsForSync(action)
+
+    // For actions whose result depends on Date.now(), lock the elapsed value
+    // here so the server replay matches the client's optimistic state exactly.
+    if ((filled.type === 'TIMER_PAUSE' || filled.type === 'END_SESSION') && filled.elapsed == null) {
+      const s = stateRef.current.sessions.find(x => x.id === filled.sessionId)
+      if (s) {
+        filled = {
+          ...filled,
+          elapsed: s.timerRunning && s.timerStartedAt
+            ? Math.floor((Date.now() - s.timerStartedAt) / 1000)
+            : (s.timerElapsed || 0)
+        }
+      }
+    }
+
     baseDispatch(filled)
     if (CLIENT_ONLY_ACTIONS.has(filled.type)) return
 

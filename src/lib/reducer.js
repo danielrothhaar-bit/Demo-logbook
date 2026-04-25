@@ -377,15 +377,21 @@ export function reducer(state, action) {
         mode: 'live'
       }
     }
-    case 'TIMER_START':
+    case 'TIMER_START': {
+      // Anchor the start so that (now - timerStartedAt) === timerElapsed at this
+      // instant. Works for fresh starts (elapsed=0) and resumes (elapsed=N) alike,
+      // and is deterministic between client and server because action.startedAt
+      // is filled in client-side.
+      const startedAt = action.startedAt || Date.now()
       return mapSession(state, action.sessionId, s => ({
         ...s,
         timerRunning: true,
-        timerStartedAt: action.startedAt || (Date.now() - s.timerElapsed * 1000),
+        timerStartedAt: startedAt - (s.timerElapsed || 0) * 1000,
         // Real-world wall-clock time the run actually began. Set once and never
         // overwritten — pause/resume must not reset this.
-        timerFirstStartedAt: s.timerFirstStartedAt || (action.startedAt || Date.now())
+        timerFirstStartedAt: s.timerFirstStartedAt || startedAt
       }))
+    }
     case 'TIMER_PAUSE':
       return mapSession(state, action.sessionId, s => {
         if (!s.timerRunning) return s
