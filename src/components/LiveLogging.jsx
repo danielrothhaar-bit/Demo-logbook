@@ -4,6 +4,9 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
 import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
 import NoteCard from './NoteCard.jsx'
+import NoteEditor from './NoteEditor.jsx'
+
+const DEMO_TARGET_SEC = 60 * 60
 
 export default function LiveLogging() {
   const { state, dispatch, activeSession, activeDesigner, gameName, gameById } = useStore()
@@ -12,6 +15,7 @@ export default function LiveLogging() {
   const [discussionMode, setDiscussionMode] = useState(false)
   const photoInputRef = useRef(null)
   const [pendingPhoto, setPendingPhoto] = useState(null)
+  const [editNote, setEditNote] = useState(null)
 
   // Single speech-recognition instance lifted up so Save can also stop it
   const sr = useSpeechRecognition()
@@ -31,6 +35,16 @@ export default function LiveLogging() {
   const currentSec = activeSession.timerRunning && activeSession.timerStartedAt
     ? Math.floor((Date.now() - activeSession.timerStartedAt) / 1000)
     : activeSession.timerElapsed
+
+  const isOvertime = currentSec >= DEMO_TARGET_SEC
+  const displaySec = isOvertime ? currentSec - DEMO_TARGET_SEC : DEMO_TARGET_SEC - currentSec
+
+  const adjustTimer = (deltaSec) => {
+    // Clamp so we never drive elapsed below 0; the recorded delta matches the actual change.
+    const actual = Math.max(-currentSec, deltaSec)
+    if (!actual) return
+    dispatch({ type: 'TIMER_ADJUST', sessionId: activeSession.id, delta: actual })
+  }
 
   const togglePick = (c) => {
     setPickedCategories(prev =>
@@ -145,7 +159,8 @@ export default function LiveLogging() {
           sr={{ ...sr, onTap: () => sr.isListening ? sr.stop() : sr.start() }}
           draft={draft}
           setDraft={setDraft}
-          currentSec={currentSec}
+          displaySec={displaySec}
+          isOvertime={isOvertime}
           onCancel={() => {
             sr.stop()
             sr.reset()
@@ -169,9 +184,42 @@ export default function LiveLogging() {
       ) : (
         <>
           {/* Timer */}
-          <div className="rounded-3xl bg-ink-800 border border-ink-700 p-5 text-center">
-            <div className="font-mono tabular-nums text-6xl font-bold tracking-tight">
-              {fmtTime(currentSec)}
+          <div className={`rounded-3xl bg-ink-800 border p-5 text-center ${
+            isOvertime ? 'border-rose-500/50' : 'border-ink-700'
+          }`}>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => adjustTimer(-60)}
+                disabled={currentSec <= 0}
+                aria-label="Subtract one minute"
+                className="w-12 h-12 rounded-full bg-ink-700 text-ink-100 active:bg-ink-600 flex flex-col items-center justify-center leading-none disabled:opacity-40"
+              >
+                <span className="text-2xl font-bold">−</span>
+                <span className="text-[9px] font-medium tracking-wider opacity-75">1 MIN</span>
+              </button>
+              <div className={`flex-1 font-mono tabular-nums text-6xl font-bold tracking-tight ${
+                isOvertime ? 'text-rose-400' : ''
+              }`}>
+                {isOvertime && '+'}{fmtTime(displaySec)}
+              </div>
+              <button
+                onClick={() => adjustTimer(60)}
+                aria-label="Add one minute"
+                className="w-12 h-12 rounded-full bg-ink-700 text-ink-100 active:bg-ink-600 flex flex-col items-center justify-center leading-none"
+              >
+                <span className="text-2xl font-bold">+</span>
+                <span className="text-[9px] font-medium tracking-wider opacity-75">1 MIN</span>
+              </button>
+            </div>
+            <div className={`mt-1 text-[11px] uppercase tracking-wider font-semibold ${
+              isOvertime ? 'text-rose-400' : 'text-ink-500'
+            }`}>
+              {isOvertime ? 'Overtime' : 'Time remaining'}
+              {(activeSession.timerAdjustment || 0) !== 0 && (
+                <span className="ml-2 text-ink-400 normal-case tracking-normal font-mono">
+                  · adj {activeSession.timerAdjustment > 0 ? '+' : '−'}{fmtTime(Math.abs(activeSession.timerAdjustment))}
+                </span>
+              )}
             </div>
             <div className="mt-3 flex items-center justify-center gap-3">
               {activeSession.timerRunning ? (
@@ -187,7 +235,7 @@ export default function LiveLogging() {
               )}
               <button
                 onClick={() => {
-                  if (confirm('Reset timer to 00:00?')) {
+                  if (confirm('Reset timer to 60:00?')) {
                     dispatch({ type: 'TIMER_RESET', sessionId: activeSession.id })
                   }
                 }}
@@ -334,21 +382,25 @@ export default function LiveLogging() {
               <NoteCard
                 key={n.id}
                 note={n}
-                onDelete={() => {
-                  if (confirm('Delete this note?')) {
-                    dispatch({ type: 'DELETE_NOTE', sessionId: activeSession.id, noteId: n.id })
-                  }
-                }}
+                onEdit={() => setEditNote(n)}
               />
             ))
           )}
         </div>
       )}
+
+      {editNote && (
+        <NoteEditor
+          note={editNote}
+          sessionId={activeSession.id}
+          onClose={() => setEditNote(null)}
+        />
+      )}
     </div>
   )
 }
 
-function FeedbackDiscussionPanel({ sr, draft, setDraft, currentSec, onEnd, onCancel }) {
+function FeedbackDiscussionPanel({ sr, draft, setDraft, displaySec, isOvertime, onEnd, onCancel }) {
   return (
     <div className="rounded-3xl bg-cyan-500/10 border border-cyan-400/30 p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -356,7 +408,9 @@ function FeedbackDiscussionPanel({ sr, draft, setDraft, currentSec, onEnd, onCan
           <div className="text-xs uppercase tracking-wider text-cyan-300 font-semibold">Feedback Discussion</div>
           <div className="text-[11px] text-cyan-200/70">Recording the debrief — keep talking. Q&A breakdown happens in review.</div>
         </div>
-        <span className="font-mono text-sm text-cyan-200 tabular-nums">{fmtTime(currentSec)}</span>
+        <span className={`font-mono text-sm tabular-nums ${isOvertime ? 'text-rose-300' : 'text-cyan-200'}`}>
+          {isOvertime && '+'}{fmtTime(displaySec)}
+        </span>
       </div>
 
       <MicButton

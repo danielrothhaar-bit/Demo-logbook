@@ -14,6 +14,69 @@ const TABS = [
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+function csvCell(v) {
+  const s = v == null ? '' : String(v)
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+
+function downloadSessionCsv(session, { gameName, designerById, gameById }) {
+  const game = gameById(session.gameId)
+  const designerNames = [...new Set(session.notes.map(n => n.designerId))]
+    .map(id => designerById(id)?.name)
+    .filter(Boolean)
+  const totalSec = session.timerElapsed || (session.notes.length
+    ? Math.max(0, ...session.notes.map(n => n.timestamp))
+    : 0)
+
+  const lines = []
+  lines.push(['Game', gameName(session.gameId)].map(csvCell).join(','))
+  lines.push(['Date', session.date || ''].map(csvCell).join(','))
+  lines.push(['Time', session.time || ''].map(csvCell).join(','))
+  lines.push(['Team Size', session.teamSize ?? ''].map(csvCell).join(','))
+  lines.push(['Experience', session.experience || ''].map(csvCell).join(','))
+  lines.push(['Designers', designerNames.join('; ')].map(csvCell).join(','))
+  lines.push(['Total Notes', session.notes.length].map(csvCell).join(','))
+  lines.push(['Elapsed', fmtTime(totalSec)].map(csvCell).join(','))
+  const adj = session.timerAdjustment || 0
+  lines.push(['Time Adjusted', adj === 0 ? '00:00' : (adj > 0 ? '+' : '-') + fmtTime(Math.abs(adj))]
+    .map(csvCell).join(','))
+  lines.push(['Status', session.ended ? 'Ended' : 'In progress'].map(csvCell).join(','))
+  lines.push('')
+  lines.push(['Timestamp', 'Designer', 'Kind', 'Categories', 'Text', 'Puzzles', 'Components', 'Has Photo']
+    .map(csvCell).join(','))
+
+  const sorted = [...session.notes].sort((a, b) => a.timestamp - b.timestamp)
+  for (const n of sorted) {
+    const d = designerById(n.designerId)
+    const puzzles = (n.puzzleIds || [])
+      .map(id => game?.puzzles?.find(p => p.id === id)?.name).filter(Boolean).join('; ')
+    const components = (n.componentIds || [])
+      .map(id => game?.components?.find(c => c.id === id)?.name).filter(Boolean).join('; ')
+    lines.push([
+      fmtTime(n.timestamp),
+      d?.name || '',
+      n.kind || 'note',
+      (n.categories || []).join('; '),
+      n.text || '',
+      puzzles,
+      components,
+      n.photoUrl ? 'yes' : 'no'
+    ].map(csvCell).join(','))
+  }
+
+  const csv = lines.join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const safeName = (gameName(session.gameId) || 'demo').replace(/[^a-z0-9-_]+/gi, '-').toLowerCase()
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `demo-${safeName}-${session.date || 'unknown'}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export default function Review() {
   const { reviewSession } = useStore()
   if (!reviewSession) {
@@ -27,7 +90,7 @@ export default function Review() {
 // ============================================================================
 
 function SessionPicker() {
-  const { state, dispatch, gameName, designerById } = useStore()
+  const { state, dispatch, gameName, designerById, gameById } = useStore()
 
   const [filterGameIds, setFilterGameIds] = useState([])
   const [dateFrom, setDateFrom] = useState(todayISO())
@@ -185,8 +248,17 @@ function SessionPicker() {
                   </div>
                 </div>
               </button>
-              {s.ended && (
-                <div className="border-t border-ink-700 px-3 py-2 flex items-center justify-end gap-2">
+              <div className="border-t border-ink-700 px-3 py-2 flex items-center justify-end gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    downloadSessionCsv(s, { gameName, designerById, gameById })
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-ink-700 border border-ink-600 text-ink-100 active:bg-ink-600 font-medium"
+                >
+                  Export Demo
+                </button>
+                {s.ended && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -198,8 +270,8 @@ function SessionPicker() {
                   >
                     Restart Demo
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )
         })}
@@ -337,7 +409,7 @@ function ReviewBody({ session: reviewSession }) {
 }
 
 function ReviewHeader({ session, totalSec }) {
-  const { state, dispatch, designerById, gameName } = useStore()
+  const { state, dispatch, designerById, gameName, gameById } = useStore()
   const [editing, setEditing] = useState(false)
   const [gameId, setGameId] = useState(session.gameId)
   const [teamSize, setTeamSize] = useState(session.teamSize)
@@ -463,6 +535,16 @@ function ReviewHeader({ session, totalSec }) {
                 <dd className="text-sm font-medium text-ink-100">{startedAtClock}</dd>
               </div>
             )}
+            {(session.timerAdjustment || 0) !== 0 && (
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-ink-400">Time adjusted</dt>
+                <dd className={`text-sm font-mono tabular-nums ${
+                  session.timerAdjustment > 0 ? 'text-emerald-300' : 'text-rose-300'
+                }`}>
+                  {session.timerAdjustment > 0 ? '+' : '−'}{fmtTime(Math.abs(session.timerAdjustment))}
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
         <div className="flex -space-x-2">
@@ -475,7 +557,18 @@ function ReviewHeader({ session, totalSec }) {
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-end mt-3">
+      <div className="flex items-center justify-end gap-2 mt-3">
+        <button
+          onClick={() => downloadSessionCsv(session, { gameName, designerById, gameById })}
+          className="text-xs text-ink-100 px-3 py-1.5 rounded-lg bg-accent-500/15 border border-accent-500/40 active:bg-accent-500/25 font-medium flex items-center gap-1.5"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export Demo
+        </button>
         <button onClick={() => setEditing(true)}
           className="text-xs text-ink-300 active:text-ink-100 px-2 py-1 rounded-lg bg-ink-700 active:bg-ink-600">
           Edit details

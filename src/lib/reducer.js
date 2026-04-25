@@ -255,6 +255,7 @@ export function reducer(state, action) {
         ...s,
         time: s.time ?? '',
         timerFirstStartedAt: s.timerFirstStartedAt ?? null,
+        timerAdjustment: s.timerAdjustment ?? 0,
         notes: (s.notes || []).map(n => ({
           ...n,
           puzzleIds: n.puzzleIds || [],
@@ -347,6 +348,7 @@ export function reducer(state, action) {
         timerRunning: false,
         timerStartedAt: null,
         timerFirstStartedAt: null,
+        timerAdjustment: 0,
         ended: false,
         notes: []
       }
@@ -394,8 +396,25 @@ export function reducer(state, action) {
       })
     case 'TIMER_RESET':
       return mapSession(state, action.sessionId, s => ({
-        ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null, timerFirstStartedAt: null
+        ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null, timerFirstStartedAt: null,
+        timerAdjustment: 0
       }))
+    case 'TIMER_ADJUST': {
+      const delta = action.delta || 0
+      if (!delta) return state
+      return mapSession(state, action.sessionId, s => {
+        const newAdjustment = (s.timerAdjustment || 0) + delta
+        if (s.timerRunning && s.timerStartedAt) {
+          // Shift the start backward (for +) or forward (for -) so live elapsed reflects the change
+          return { ...s, timerStartedAt: s.timerStartedAt - delta * 1000, timerAdjustment: newAdjustment }
+        }
+        return {
+          ...s,
+          timerElapsed: Math.max(0, (s.timerElapsed || 0) + delta),
+          timerAdjustment: newAdjustment
+        }
+      })
+    }
     case 'END_SESSION': {
       const next = mapSession(state, action.sessionId, s => ({
         ...s,
