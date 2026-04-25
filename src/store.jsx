@@ -152,5 +152,34 @@ export function fmtTime(sec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
 }
 
+// Demo countdown anchor — kept here so reducer + UI agree on the same target.
+export const DEMO_TARGET_SEC = 60 * 60
+
+// Render an elapsed-seconds value as countdown form. "+mm:ss" means overtime
+// (elapsed > target). Negative elapsed (timer was extended via +1m before
+// running) renders as a value above the target.
+export function fmtCountdown(elapsedSec, targetSec = DEMO_TARGET_SEC) {
+  if (elapsedSec == null || isNaN(elapsedSec)) return fmtTime(targetSec)
+  const remaining = targetSec - Math.floor(elapsedSec)
+  if (remaining < 0) return '+' + fmtTime(-remaining)
+  return fmtTime(remaining)
+}
+
+// Inverse of fmtCountdown — accepts either "mm:ss" or "+mm:ss" and returns
+// elapsed seconds. Returns null on parse failure.
+export function parseCountdown(str, targetSec = DEMO_TARGET_SEC) {
+  if (!str) return null
+  const trimmed = String(str).trim()
+  const isOver = trimmed.startsWith('+')
+  const body = isOver ? trimmed.slice(1).trim() : trimmed
+  const m = body.match(/^(\d{1,3}):(\d{1,2})$/)
+  if (!m) return null
+  const minutes = parseInt(m[1], 10)
+  const seconds = parseInt(m[2], 10)
+  if (seconds > 59) return null
+  const total = minutes * 60 + seconds
+  return isOver ? targetSec + total : targetSec - total
+}
+
 // Re-exported so existing imports keep working
 export { CATEGORY_COLORS, initialsFromName }

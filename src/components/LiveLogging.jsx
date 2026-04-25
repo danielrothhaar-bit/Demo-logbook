@@ -1,13 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtTime, DEMO_TARGET_SEC } from '../store.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
 import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import ClickablePhoto from './ClickablePhoto.jsx'
-
-const DEMO_TARGET_SEC = 60 * 60
 
 export default function LiveLogging() {
   const { state, dispatch, activeSession, activeDesigner, gameName, gameById } = useStore()

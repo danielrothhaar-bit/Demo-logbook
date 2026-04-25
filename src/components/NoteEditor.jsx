@@ -1,17 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtCountdown, parseCountdown } from '../store.jsx'
 import { analyzeNoteText } from '../utils/autoTag.js'
-
-// mm:ss → seconds, returns null if invalid
-function parseMMSS(str) {
-  if (!str) return null
-  const m = String(str).match(/^(\d{1,3}):(\d{1,2})$/)
-  if (!m) return null
-  const minutes = parseInt(m[1], 10)
-  const seconds = parseInt(m[2], 10)
-  if (seconds > 59) return null
-  return minutes * 60 + seconds
-}
 
 const toggle = (arr, v) => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]
 
@@ -23,12 +12,12 @@ export default function NoteEditor({ note, sessionId, onClose }) {
 
   const [text, setText]               = useState(note.text)
   const [designerId, setDesignerId]   = useState(note.designerId)
-  const [tsStr, setTsStr]             = useState(fmtTime(note.timestamp))
+  const [tsStr, setTsStr]             = useState(fmtCountdown(note.timestamp))
   const [categories, setCategories]   = useState(note.categories || [])
   const [puzzleIds, setPuzzleIds]     = useState(note.puzzleIds || [])
   const [componentIds, setComponentIds] = useState(note.componentIds || [])
 
-  const tsValid = parseMMSS(tsStr) != null
+  const tsValid = parseCountdown(tsStr) != null
   const isFeedback = note.kind === 'feedback'
 
   // Categories available as quick tags. Hide Feedback Discussion for normal
@@ -46,7 +35,7 @@ export default function NoteEditor({ note, sessionId, onClose }) {
   }
 
   const save = () => {
-    const ts = parseMMSS(tsStr)
+    const ts = parseCountdown(tsStr)
     if (ts == null) return
     dispatch({
       type: 'UPDATE_NOTE',
@@ -81,8 +70,8 @@ export default function NoteEditor({ note, sessionId, onClose }) {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time (mm:ss)</div>
-              <input value={tsStr} onChange={(e) => setTsStr(e.target.value)} placeholder="00:00"
+              <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time remaining</div>
+              <input value={tsStr} onChange={(e) => setTsStr(e.target.value)} placeholder="60:00"
                 className={`w-full bg-ink-900 border rounded-lg px-3 py-2 outline-none font-mono tabular-nums ${
                   tsValid ? 'border-ink-700 focus:border-accent-500' : 'border-rose-500'
                 }`} />
@@ -95,7 +84,10 @@ export default function NoteEditor({ note, sessionId, onClose }) {
               </select>
             </div>
           </div>
-          {!tsValid && <div className="text-[11px] text-rose-300 -mt-2">Use the format mm:ss (seconds 00–59).</div>}
+          {!tsValid
+            ? <div className="text-[11px] text-rose-300 -mt-2">Use mm:ss countdown form. Prefix with + for overtime (e.g. +02:30).</div>
+            : <div className="text-[11px] text-ink-500 -mt-2">Countdown — prefix with + for overtime (e.g. +02:30).</div>
+          }
 
           <div>
             <div className="flex items-center justify-between mb-1">

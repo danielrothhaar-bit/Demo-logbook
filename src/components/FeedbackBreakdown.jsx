@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtCountdown } from '../store.jsx'
 import { analyzeFeedback } from '../utils/synthesis.js'
 
 export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
@@ -12,7 +12,7 @@ export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
     <div className="rounded-2xl border border-blue-400/30 bg-blue-500/5 p-3 animate-fadeUp">
       <div className="flex items-center gap-2 mb-2">
         <span className="font-mono text-xs tabular-nums text-ink-400 bg-ink-900 rounded px-1.5 py-0.5">
-          {fmtTime(note.timestamp)}
+          {fmtCountdown(note.timestamp)}
         </span>
         <span className="text-[10px] uppercase tracking-wider text-blue-300 bg-blue-500/15 rounded-full px-2 py-0.5 font-semibold">
           Feedback Discussion

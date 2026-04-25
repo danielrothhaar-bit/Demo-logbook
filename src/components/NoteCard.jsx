@@ -1,5 +1,5 @@
 import React from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtCountdown } from '../store.jsx'
 import FeedbackBreakdown from './FeedbackBreakdown.jsx'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -30,7 +30,7 @@ export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
     }`}>
       <div className="flex items-center gap-2 mb-1.5">
         <span className="font-mono text-xs tabular-nums text-ink-400 bg-ink-900 rounded px-1.5 py-0.5">
-          {fmtTime(note.timestamp)}
+          {fmtCountdown(note.timestamp)}
         </span>
         {designer && (
           <span

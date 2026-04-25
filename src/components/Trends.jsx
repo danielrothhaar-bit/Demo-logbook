@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
 import { aggregateAcrossSessions } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -356,7 +356,7 @@ function LeaderboardRow({ item, totalDemos, kind, mode }) {
               const d = designerById(n.designerId)
               return (
                 <div key={n.id} className="text-xs text-ink-200 bg-ink-900 rounded-lg p-2">
-                  <span className="font-mono text-ink-400 mr-2">{fmtTime(n.timestamp)}</span>
+                  <span className="font-mono text-ink-400 mr-2">{fmtCountdown(n.timestamp)}</span>
                   <span className="font-bold mr-1.5" style={{ color: d?.color }}>{d?.initials}</span>
                   <span className="text-ink-500 mr-2">({n.sessionDate})</span>
                   {n.text}

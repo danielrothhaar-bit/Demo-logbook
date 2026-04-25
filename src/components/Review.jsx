@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
@@ -53,7 +53,7 @@ function downloadSessionCsv(session, { gameName, designerById, gameById }) {
     const components = (n.componentIds || [])
       .map(id => game?.components?.find(c => c.id === id)?.name).filter(Boolean).join('; ')
     lines.push([
-      fmtTime(n.timestamp),
+      fmtCountdown(n.timestamp),
       d?.name || '',
       n.kind || 'note',
       (n.categories || []).join('; '),
@@ -661,7 +661,7 @@ function Filters({ session, filterCats, setFilterCats, filterDesigners, setFilte
         </div>
 
         <div>
-          <div className="text-xs text-ink-400 mb-1">Time range: {fmtTime(range[0])} – {fmtTime(range[1])}</div>
+          <div className="text-xs text-ink-400 mb-1">Time range: {fmtCountdown(range[0])} → {fmtCountdown(range[1])}</div>
           <div className="flex items-center gap-2">
             <input type="range" min={0} max={totalSec} value={range[0]}
               onChange={(e) => setTsRange([Math.min(+e.target.value, range[1]), range[1]])}
@@ -690,7 +690,7 @@ function MergedCard({ group }) {
     <div className="rounded-2xl p-3 bg-ink-800 border border-emerald-500/30 animate-fadeUp">
       <div className="flex items-center gap-2 mb-1.5">
         <span className="font-mono text-xs tabular-nums text-ink-400 bg-ink-900 rounded px-1.5 py-0.5">
-          {fmtTime(group.startTs)}
+          {fmtCountdown(group.startTs)}
         </span>
         <span className="text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 rounded-full px-2 py-0.5 font-semibold">
           Merged · {group.notes.length}×
@@ -716,7 +716,7 @@ function MergedCard({ group }) {
             const d = designerById(n.designerId)
             return (
               <div key={n.id} className="text-xs text-ink-300 bg-ink-900 rounded-lg p-2">
-                <span className="font-mono text-ink-400 mr-2">{fmtTime(n.timestamp)}</span>
+                <span className="font-mono text-ink-400 mr-2">{fmtCountdown(n.timestamp)}</span>
                 <span className="font-bold mr-2" style={{ color: d?.color }}>{d?.initials}</span>
                 {n.text}
               </div>
@@ -738,7 +738,7 @@ function Synthesis({ consensus, divergence, duplicates }) {
         {consensus.map((c, i) => (
           <div key={i} className="rounded-2xl bg-ink-800 border border-emerald-500/40 p-3 animate-fadeUp">
             <div className="flex items-center gap-2 text-xs">
-              <span className="font-mono text-ink-300">{fmtTime(c.startTs)}–{fmtTime(c.endTs)}</span>
+              <span className="font-mono text-ink-300">{fmtCountdown(c.startTs)}–{fmtCountdown(c.endTs)}</span>
               <span className="px-2 py-0.5 rounded-full font-medium"
                     style={{ backgroundColor: `${categoryColor(c.category)}22`, color: categoryColor(c.category) }}>
                 {c.category}
@@ -764,7 +764,7 @@ function Synthesis({ consensus, divergence, duplicates }) {
         {divergence.map((d, i) => (
           <div key={i} className="rounded-2xl bg-ink-800 border border-rose-500/40 p-3 animate-fadeUp">
             <div className="flex items-center gap-2 text-xs">
-              <span className="font-mono text-ink-300">{fmtTime(d.startTs)}–{fmtTime(d.endTs)}</span>
+              <span className="font-mono text-ink-300">{fmtCountdown(d.startTs)}–{fmtCountdown(d.endTs)}</span>
               <span className="text-rose-300 font-semibold">Mixed reactions</span>
             </div>
             <div className="mt-2 grid gap-1.5">
@@ -810,7 +810,7 @@ function Summary({ summary, session }) {
         {summary.issues.length === 0 ? <Empty text="No issues flagged." /> :
           summary.issues.map((i, idx) => (
             <SummaryRow key={idx} index={idx + 1} text={i.text}
-              meta={`${fmtTime(i.timestamp)} · ${i.category}${i.designerCount > 1 ? ` · ${i.designerCount} designers agree` : ''}`} />
+              meta={`${fmtCountdown(i.timestamp)} · ${i.category}${i.designerCount > 1 ? ` · ${i.designerCount} designers agree` : ''}`} />
           ))
         }
       </Section>
@@ -819,7 +819,7 @@ function Summary({ summary, session }) {
         {summary.wins.length === 0 ? <Empty text="No wins flagged." /> :
           summary.wins.map((w, idx) => (
             <SummaryRow key={idx} index={idx + 1} text={w.text}
-              meta={`${fmtTime(w.timestamp)} · ${w.category}${w.designerCount > 1 ? ` · ${w.designerCount} designers agree` : ''}`} positive />
+              meta={`${fmtCountdown(w.timestamp)} · ${w.category}${w.designerCount > 1 ? ` · ${w.designerCount} designers agree` : ''}`} positive />
           ))
         }
       </Section>
