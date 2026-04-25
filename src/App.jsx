@@ -32,7 +32,7 @@ function Header() {
   const { state, dispatch } = useStore()
   const labels = {
     home: 'Demo Logbook',
-    setup: 'New Playthrough',
+    setup: 'New Demo',
     live: 'Live Logging',
     review: 'Review',
     trends: 'Trends',

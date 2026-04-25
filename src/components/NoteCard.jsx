@@ -20,8 +20,8 @@ export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
     return null
   }
   const game = findGame()
-  const puzzleNames    = (note.puzzleIds    || []).map(id => game?.puzzles   ?.find(p => p.id === id)?.name).filter(Boolean)
-  const componentNames = (note.componentIds || []).map(id => game?.components?.find(c => c.id === id)?.name).filter(Boolean)
+  const puzzleRefs     = (note.puzzleIds    || []).map(id => game?.puzzles   ?.find(p => p.id === id)).filter(Boolean)
+  const componentRefs  = (note.componentIds || []).map(id => game?.components?.find(c => c.id === id)).filter(Boolean)
 
   return (
     <div className={`rounded-2xl p-3 border animate-fadeUp ${
@@ -75,16 +75,16 @@ export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
       </div>
       <div className="text-[15px] leading-snug text-ink-50 break-words">{note.text}</div>
 
-      {(puzzleNames.length > 0 || componentNames.length > 0) && (
+      {(puzzleRefs.length > 0 || componentRefs.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {puzzleNames.map(n => (
-            <span key={'p-' + n} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-400/30 text-violet-200 font-medium">
-              🧩 {n}
+          {puzzleRefs.map(p => (
+            <span key={p.id} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-400/30 text-violet-200 font-medium">
+              🧩 {p.code ? <span className="font-mono opacity-70 mr-1">{p.code}</span> : null}{p.name}
             </span>
           ))}
-          {componentNames.map(n => (
-            <span key={'c-' + n} className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/15 border border-pink-400/30 text-pink-200 font-medium">
-              ⚙ {n}
+          {componentRefs.map(c => (
+            <span key={c.id} className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/15 border border-pink-400/30 text-pink-200 font-medium">
+              ⚙ {c.code ? <span className="font-mono opacity-70 mr-1">{c.code}</span> : null}{c.name}
             </span>
           ))}
         </div>

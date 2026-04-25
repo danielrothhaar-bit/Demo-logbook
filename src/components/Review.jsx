@@ -143,7 +143,7 @@ function SessionPicker() {
       </details>
 
       <div className="text-xs text-ink-400 px-1">
-        {filtered.length} of {state.sessions.length} sessions
+        {filtered.length} of {state.sessions.length} demos
         {isToday && filtered.length === 0 && state.sessions.length > 0 &&
           <> — <button onClick={() => setRange(Infinity)} className="text-accent-400 active:text-accent-500">show all</button></>}
       </div>
@@ -165,8 +165,13 @@ function SessionPicker() {
                         <span className="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" /> Live
                       </span>}
                     </div>
-                    <div className="text-xs text-ink-400 mt-0.5">
-                      {s.date}{s.time ? ` · ${s.time}` : ''} · team {s.teamSize} · {s.experience} · {s.notes.length} notes
+                    <div className="text-sm text-ink-300 mt-0.5">
+                      {s.time && <span>{s.time}</span>}
+                      {s.time && <span className="text-ink-500 mx-1.5">·</span>}
+                      <span>{s.date}</span>
+                    </div>
+                    <div className="text-[11px] text-ink-500 mt-0.5">
+                      Team of {s.teamSize} · {s.experience} · {s.notes.length} notes
                     </div>
                   </div>
                   <div className="flex -space-x-2">
@@ -185,13 +190,13 @@ function SessionPicker() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (confirm(`Restart "${gameName(s.gameId)}" session and resume in Live?`)) {
+                      if (confirm(`Restart "${gameName(s.gameId)}" demo and resume in Live?`)) {
                         dispatch({ type: 'RESTART_SESSION', sessionId: s.id })
                       }
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 active:bg-emerald-500/25 font-medium"
                   >
-                    Restart session
+                    Restart Demo
                   </button>
                 </div>
               )}
@@ -199,7 +204,7 @@ function SessionPicker() {
           )
         })}
         {filtered.length === 0 && (
-          <div className="text-ink-500 text-sm text-center py-6">No sessions match the filters.</div>
+          <div className="text-ink-500 text-sm text-center py-6">No demos match the filters.</div>
         )}
       </div>
     </div>
@@ -272,7 +277,7 @@ function ReviewBody({ session: reviewSession }) {
           <line x1="19" y1="12" x2="5" y2="12" />
           <polyline points="12 19 5 12 12 5" />
         </svg>
-        <span className="font-semibold">Back to sessions</span>
+        <span className="font-semibold">Back to demos</span>
       </button>
 
       <ReviewHeader session={reviewSession} totalSec={totalSec} />
@@ -356,7 +361,7 @@ function ReviewHeader({ session, totalSec }) {
   }
 
   const removeSession = () => {
-    if (!confirm(`Permanently delete this ${gameName(session.gameId)} session and all its ${session.notes.length} notes? This cannot be undone.`)) return
+    if (!confirm(`Permanently delete this ${gameName(session.gameId)} demo and all its ${session.notes.length} notes? This cannot be undone.`)) return
     dispatch({ type: 'DELETE_SESSION', sessionId: session.id })
     dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })
   }
@@ -419,7 +424,7 @@ function ReviewHeader({ session, totalSec }) {
 
         <button onClick={removeSession}
           className="w-full py-3 rounded-xl bg-rose-500/10 border border-rose-500/40 active:bg-rose-500/20 text-rose-200 font-semibold">
-          Delete this session
+          Delete this Demo
         </button>
       </div>
     )
@@ -429,16 +434,36 @@ function ReviewHeader({ session, totalSec }) {
     <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4">
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-lg">{gameName(session.gameId)}</div>
-          <div className="text-xs text-ink-400 mt-0.5">
-            {session.date}{session.time ? ` · scheduled ${session.time}` : ''} · team {session.teamSize} · {session.experience}
+          <div className="font-semibold text-lg leading-tight flex flex-wrap items-baseline gap-x-2">
+            <span>{gameName(session.gameId)}</span>
+            <span className="text-ink-500">|</span>
+            <span>{session.date}</span>
+            {session.time && <>
+              <span className="text-ink-500">|</span>
+              <span>{session.time}</span>
+            </>}
           </div>
-          <div className="text-xs text-ink-400 mt-0.5 font-mono">
-            Code {session.sessionCode} · {fmtTime(totalSec)} elapsed
-          </div>
-          {startedAtClock && (
-            <div className="text-xs text-ink-400 mt-0.5">Actual start: {startedAtClock}</div>
-          )}
+
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3">
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-ink-400">Guests</dt>
+              <dd className="text-sm font-medium text-ink-100">{session.teamSize}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-ink-400">Experience</dt>
+              <dd className="text-sm font-medium text-ink-100 capitalize">{session.experience}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] uppercase tracking-wider text-ink-400">Elapsed</dt>
+              <dd className="text-sm font-mono tabular-nums text-ink-100">{fmtTime(totalSec)}</dd>
+            </div>
+            {startedAtClock && (
+              <div>
+                <dt className="text-[10px] uppercase tracking-wider text-ink-400">Actual start</dt>
+                <dd className="text-sm font-medium text-ink-100">{startedAtClock}</dd>
+              </div>
+            )}
+          </dl>
         </div>
         <div className="flex -space-x-2">
           {designers.map(d => (
@@ -450,7 +475,7 @@ function ReviewHeader({ session, totalSec }) {
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-end mt-2">
+      <div className="flex items-center justify-end mt-3">
         <button onClick={() => setEditing(true)}
           className="text-xs text-ink-300 active:text-ink-100 px-2 py-1 rounded-lg bg-ink-700 active:bg-ink-600">
           Edit details
@@ -670,8 +695,8 @@ function Summary({ summary, session }) {
       <div className="rounded-2xl bg-gradient-to-br from-accent-500/15 to-emerald-500/10 border border-accent-500/30 p-4">
         <div className="text-xs uppercase tracking-wider text-accent-400 mb-1">Auto-summary</div>
         <div className="text-sm text-ink-200">
-          Heuristic synthesis of {session.notes.length} notes from this session.
-          Action items can be promoted to the cross-session tracker.
+          Heuristic synthesis of {session.notes.length} notes from this demo.
+          Action items can be promoted to the cross-demo tracker.
         </div>
       </div>
 

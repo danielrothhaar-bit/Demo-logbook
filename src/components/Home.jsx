@@ -13,7 +13,7 @@ export default function Home() {
         onClick={() => dispatch({ type: 'SET_MODE', mode: 'setup' })}
         className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
       >
-        + Start New Playthrough
+        + Start New Demo
       </button>
 
       {live.length > 0 && (
@@ -30,9 +30,12 @@ export default function Home() {
                   <span className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{gameName(s.gameId)}</div>
-                    <div className="text-xs text-ink-400">
-                      Code {s.sessionCode} · {s.notes.length} notes
+                    <div className="text-sm text-ink-300 mt-0.5">
+                      {s.time && <span>{s.time}</span>}
+                      {s.time && <span className="text-ink-500 mx-1.5">·</span>}
+                      <span>{s.date}</span>
                     </div>
+                    <div className="text-[11px] text-ink-500 mt-0.5">{s.notes.length} notes</div>
                   </div>
                   <div className="font-mono text-xl tabular-nums">{fmtTime(s.timerElapsed)}</div>
                 </div>
@@ -43,9 +46,9 @@ export default function Home() {
       )}
 
       <section>
-        <h2 className="text-xs uppercase tracking-wider text-ink-400 mb-2 px-1">Past playthroughs</h2>
+        <h2 className="text-xs uppercase tracking-wider text-ink-400 mb-2 px-1">Past Demos</h2>
         {past.length === 0 ? (
-          <div className="text-ink-400 text-sm px-1">No completed sessions yet.</div>
+          <div className="text-ink-400 text-sm px-1">No completed demos yet.</div>
         ) : (
           <div className="space-y-2">
             {past.map(s => {
@@ -60,8 +63,13 @@ export default function Home() {
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate">{gameName(s.gameId)}</div>
-                      <div className="text-xs text-ink-400 mt-0.5">
-                        {s.date} · team of {s.teamSize} · {s.experience} · {s.notes.length} notes
+                      <div className="text-sm text-ink-300 mt-0.5">
+                        {s.time && <span>{s.time}</span>}
+                        {s.time && <span className="text-ink-500 mx-1.5">·</span>}
+                        <span>{s.date}</span>
+                      </div>
+                      <div className="text-[11px] text-ink-500 mt-0.5">
+                        Team of {s.teamSize} · {s.experience} · {s.notes.length} notes
                       </div>
                     </div>
                     <div className="flex -space-x-2">

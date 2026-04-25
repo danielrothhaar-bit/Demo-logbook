@@ -46,7 +46,7 @@ export default function SessionSetup() {
       <div className="px-4 pt-6 space-y-4">
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
           <div className="font-semibold mb-1">No games yet</div>
-          <div className="text-sm text-ink-400 mb-4">Add a game in Admin before starting a session.</div>
+          <div className="text-sm text-ink-400 mb-4">Add a game in Admin before starting a demo.</div>
           <button
             onClick={() => dispatch({ type: 'SET_MODE', mode: 'admin' })}
             className="px-5 py-3 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-bold"

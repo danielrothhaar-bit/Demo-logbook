@@ -95,13 +95,13 @@ function DesignerRow({ designer }) {
         >{designer.initials}</span>
         <div className="flex-1 min-w-0">
           <div className="font-semibold truncate">{designer.name}</div>
-          <div className="text-xs text-ink-400">{inUse ? 'in use across sessions' : 'no notes yet'}</div>
+          <div className="text-xs text-ink-400">{inUse ? 'in use across demos' : 'no notes yet'}</div>
         </div>
         <button onClick={() => setEditing(true)}
           className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Edit</button>
         <button
           onClick={() => {
-            if (inUse) return alert('Cannot delete — designer has notes in past sessions.')
+            if (inUse) return alert('Cannot delete — designer has notes in past demos.')
             if (confirm(`Delete ${designer.name}?`)) dispatch({ type: 'DELETE_DESIGNER', id: designer.id })
           }}
           disabled={inUse}
@@ -185,7 +185,7 @@ function GamesPanel() {
           Add
         </button>
       </div>
-      <div className="text-[11px] text-ink-500 px-1">Newest game becomes the default for new sessions.</div>
+      <div className="text-[11px] text-ink-500 px-1">Newest game becomes the default for new demos.</div>
 
       <div className="space-y-2">
         {sorted.map((g, i) => <GameRow key={g.id} game={g} isNewest={i === 0} />)}
@@ -240,7 +240,7 @@ function GameRow({ game, isNewest }) {
                 {isNewest && <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-bold">newest</span>}
               </div>
               <div className="text-xs text-ink-400">
-                {sessionCount} session{sessionCount === 1 ? '' : 's'} · {puzzles.length} puzzle{puzzles.length === 1 ? '' : 's'} · {components.length} component{components.length === 1 ? '' : 's'}
+                {sessionCount} demo{sessionCount === 1 ? '' : 's'} · {puzzles.length} puzzle{puzzles.length === 1 ? '' : 's'} · {components.length} component{components.length === 1 ? '' : 's'}
               </div>
             </>
           )}
@@ -255,7 +255,7 @@ function GameRow({ game, isNewest }) {
             <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Edit</button>
             <button
               onClick={() => {
-                if (inUse) return alert('Cannot delete — game has past sessions. Rename it instead.')
+                if (inUse) return alert('Cannot delete — game has past demos. Rename it instead.')
                 if (confirm(`Delete "${game.name}"?`)) dispatch({ type: 'DELETE_GAME', id: game.id })
               }}
               disabled={inUse}
@@ -270,16 +270,16 @@ function GameRow({ game, isNewest }) {
             title="Puzzles"
             hint="Auto-tag and link notes that mention these by name."
             items={puzzles}
-            onAdd={(name) => dispatch({ type: 'ADD_PUZZLE', gameId: game.id, name })}
-            onRename={(id, name) => dispatch({ type: 'UPDATE_PUZZLE', gameId: game.id, id, patch: { name } })}
+            onAdd={(name, code) => dispatch({ type: 'ADD_PUZZLE', gameId: game.id, name, code })}
+            onUpdate={(id, patch) => dispatch({ type: 'UPDATE_PUZZLE', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_PUZZLE', gameId: game.id, id })}
           />
           <NamedItemList
             title="Components"
-            hint="Physical props, locks, screens, audio cues, etc."
+            hint="Physical props, locks, screens, audio cues, etc. Code is shown as a small chip; auto-tagging matches names only."
             items={components}
-            onAdd={(name) => dispatch({ type: 'ADD_COMPONENT', gameId: game.id, name })}
-            onRename={(id, name) => dispatch({ type: 'UPDATE_COMPONENT', gameId: game.id, id, patch: { name } })}
+            onAdd={(name, code) => dispatch({ type: 'ADD_COMPONENT', gameId: game.id, name, code })}
+            onUpdate={(id, patch) => dispatch({ type: 'UPDATE_COMPONENT', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_COMPONENT', gameId: game.id, id })}
           />
         </div>
@@ -288,14 +288,16 @@ function GameRow({ game, isNewest }) {
   )
 }
 
-function NamedItemList({ title, hint, items, onAdd, onRename, onDelete }) {
-  const [draft, setDraft] = useState('')
+function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete }) {
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
   const add = () => {
-    const v = draft.trim()
+    const v = name.trim()
     if (!v) return
-    if (items.some(i => i.name.toLowerCase() === v.toLowerCase())) return
-    onAdd(v)
-    setDraft('')
+    if (items.some(i => i.name.toLowerCase() === v.toLowerCase() && (i.code || '') === code.trim())) return
+    onAdd(v, code.trim())
+    setName('')
+    setCode('')
   }
   return (
     <div>
@@ -304,38 +306,48 @@ function NamedItemList({ title, hint, items, onAdd, onRename, onDelete }) {
       <div className="space-y-1.5">
         {items.map(item => (
           <NamedItemRow key={item.id} item={item}
-            onRename={(name) => onRename(item.id, name)}
+            onSave={(patch) => onUpdate(item.id, patch)}
             onDelete={() => { if (confirm(`Delete "${item.name}"?`)) onDelete(item.id) }} />
         ))}
         {items.length === 0 && <div className="text-[11px] text-ink-500 italic">None yet.</div>}
       </div>
       <div className="flex gap-2 mt-2">
         <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+          placeholder="Code (optional)"
+          className="w-28 bg-ink-800 border border-ink-700 rounded-lg px-2 py-2 outline-none focus:border-accent-500 text-sm font-mono"
+        />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
           placeholder={`Add ${title.toLowerCase().replace(/s$/, '')}…`}
           className="flex-1 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 text-sm"
         />
-        <button onClick={add} disabled={!draft.trim()}
+        <button onClick={add} disabled={!name.trim()}
           className="px-3 rounded-lg bg-ink-700 active:bg-ink-600 disabled:opacity-30 text-sm">Add</button>
       </div>
     </div>
   )
 }
 
-function NamedItemRow({ item, onRename, onDelete }) {
+function NamedItemRow({ item, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(item.name)
+  const [code, setCode] = useState(item.code || '')
   const save = () => {
     const v = name.trim()
     if (!v) return
-    onRename(v)
+    onSave({ name: v, code: code.trim() })
     setEditing(false)
   }
   if (editing) {
     return (
       <div className="flex items-center gap-2 bg-ink-800 border border-accent-500 rounded-lg px-2 py-1">
+        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code"
+          className="w-24 bg-transparent outline-none text-sm font-mono" />
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
           className="flex-1 bg-transparent outline-none text-sm" />
@@ -345,7 +357,12 @@ function NamedItemRow({ item, onRename, onDelete }) {
     )
   }
   return (
-    <div className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-lg pl-3 pr-1 py-1">
+    <div className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-lg pl-2 pr-1 py-1">
+      {item.code && (
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-ink-300 border border-ink-700">
+          {item.code}
+        </span>
+      )}
       <span className="flex-1 text-sm">{item.name}</span>
       <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2">Edit</button>
       <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30">✕</button>

@@ -248,8 +248,8 @@ export function reducer(state, action) {
       // Migrations: ensure newer fields exist on data persisted before they were added
       next.games = (next.games || []).map(g => ({
         ...g,
-        puzzles: g.puzzles || [],
-        components: g.components || []
+        puzzles: (g.puzzles || []).map(p => ({ ...p, code: p.code || '' })),
+        components: (g.components || []).map(c => ({ ...c, code: c.code || '' }))
       }))
       next.sessions = (next.sessions || []).map(s => ({
         ...s,
@@ -313,7 +313,7 @@ export function reducer(state, action) {
     // Per-game puzzles
     case 'ADD_PUZZLE':
       return updateGameField(state, action.gameId, 'puzzles', list => [
-        ...list, { id: action.id || ('p_' + uid()), name: action.name.trim() }
+        ...list, { id: action.id || ('p_' + uid()), name: action.name.trim(), code: (action.code || '').trim() }
       ])
     case 'UPDATE_PUZZLE':
       return updateGameField(state, action.gameId, 'puzzles', list =>
@@ -325,7 +325,7 @@ export function reducer(state, action) {
     // Per-game components
     case 'ADD_COMPONENT':
       return updateGameField(state, action.gameId, 'components', list => [
-        ...list, { id: action.id || ('c_' + uid()), name: action.name.trim() }
+        ...list, { id: action.id || ('c_' + uid()), name: action.name.trim(), code: (action.code || '').trim() }
       ])
     case 'UPDATE_COMPONENT':
       return updateGameField(state, action.gameId, 'components', list =>
@@ -396,8 +396,8 @@ export function reducer(state, action) {
       return mapSession(state, action.sessionId, s => ({
         ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null, timerFirstStartedAt: null
       }))
-    case 'END_SESSION':
-      return mapSession(state, action.sessionId, s => ({
+    case 'END_SESSION': {
+      const next = mapSession(state, action.sessionId, s => ({
         ...s,
         ended: true,
         timerRunning: false,
@@ -406,6 +406,9 @@ export function reducer(state, action) {
           : (s.timerRunning && s.timerStartedAt ? Math.floor((Date.now() - s.timerStartedAt) / 1000) : s.timerElapsed),
         timerStartedAt: null
       }))
+      // Clear active demo so Live tab returns to the listing next time
+      return next.activeSessionId === action.sessionId ? { ...next, activeSessionId: null } : next
+    }
 
     case 'ADD_NOTE': {
       const note = {

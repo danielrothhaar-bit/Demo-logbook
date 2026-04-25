@@ -48,7 +48,7 @@ export default function Trends() {
       <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4">
         <div className="flex items-baseline gap-3">
           <div className="text-3xl font-bold">{gameSessions.length}</div>
-          <div className="text-xs text-ink-400 uppercase tracking-wider">playthroughs of <span className="text-ink-200">{game.name}</span></div>
+          <div className="text-xs text-ink-400 uppercase tracking-wider">demos of <span className="text-ink-200">{game.name}</span></div>
         </div>
         {gameSessions.length > 0 && (
           <div className="text-xs text-ink-400 mt-1">
@@ -58,7 +58,7 @@ export default function Trends() {
       </div>
 
       {/* Recurring friction points */}
-      <Section title="Recurring friction" hint="Same minute flagged across multiple sessions.">
+      <Section title="Recurring friction" hint="Same minute flagged across multiple demos.">
         {agg.recurringFriction.length === 0 ? (
           <Empty text="No recurring friction yet." />
         ) : (
@@ -68,7 +68,7 @@ export default function Trends() {
                 <div className="font-mono text-sm">~{String(b.minute).padStart(2,'0')}:00</div>
                 <div className="text-xs">
                   <span className="font-bold text-rose-300">{b.sessionIds.length}</span>
-                  <span className="text-ink-400"> of {gameSessions.length} playthroughs</span>
+                  <span className="text-ink-400"> of {gameSessions.length} demos</span>
                 </div>
               </div>
               <RatioBar value={b.sessionIds.length} max={gameSessions.length} color="#f87171" />
@@ -117,7 +117,7 @@ export default function Trends() {
       </Section>
 
       {/* Action items */}
-      <Section title="Action items" hint="Promoted from session reviews. Tap status to advance.">
+      <Section title="Action items" hint="Promoted from demo reviews. Tap status to advance.">
         <div className="space-y-2">
           {state.actionItems.map(a => {
             const sCount = a.sourceSessionIds.length
@@ -128,7 +128,7 @@ export default function Trends() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm leading-snug">{a.text}</div>
                     <div className="text-[11px] text-ink-400 mt-1">
-                      from {sCount} session{sCount === 1 ? '' : 's'}
+                      from {sCount} demo{sCount === 1 ? '' : 's'}
                       {a.relatedCategory && <> · {a.relatedCategory}</>}
                     </div>
                   </div>

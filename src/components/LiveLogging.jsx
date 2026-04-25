@@ -25,11 +25,7 @@ export default function LiveLogging() {
   }, [sr.isListening, sr.finalTranscript, sr.interim])
 
   if (!activeSession) {
-    return (
-      <div className="px-4 pt-10 text-center text-ink-300">
-        No active session. Start one from the home screen.
-      </div>
-    )
+    return <LiveListing />
   }
 
   const currentSec = activeSession.timerRunning && activeSession.timerStartedAt
@@ -121,11 +117,25 @@ export default function LiveLogging() {
 
   return (
     <div className="px-4 pt-3 space-y-4">
-      {/* Session bar */}
+      {/* Back to live demos list */}
+      <button
+        onClick={() => dispatch({ type: 'OPEN_SESSION_LIVE', id: null })}
+        className="flex items-center gap-2 text-xs text-accent-400 active:text-accent-500"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        Live demos
+      </button>
+
+      {/* Demo bar */}
       <div className="flex items-center gap-2 text-xs text-ink-400">
         <span className="font-semibold text-ink-200">{gameName(activeSession.gameId)}</span>
-        <span>·</span>
-        <span>code <span className="font-mono text-ink-200">{activeSession.sessionCode}</span></span>
+        {activeSession.time && <>
+          <span>·</span>
+          <span>{activeSession.time}</span>
+        </>}
         <span>·</span>
         <span>team {activeSession.teamSize} · {activeSession.experience}</span>
       </div>
@@ -281,10 +291,10 @@ export default function LiveLogging() {
             </div>
           </button>
 
-          {/* End Session — same prominent card style as Feedback Discussion */}
+          {/* End Demo — same prominent card style as Feedback Discussion */}
           <button
             onClick={() => {
-              if (confirm('End this session and move to review?')) {
+              if (confirm('End this demo and move to review?')) {
                 dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
                 dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
               }
@@ -299,7 +309,7 @@ export default function LiveLogging() {
                 </svg>
               </div>
               <div className="flex-1">
-                <div className="font-semibold text-rose-100">End Session</div>
+                <div className="font-semibold text-rose-100">End Demo</div>
                 <div className="text-[12px] text-rose-200/70">Stop the timer and move to review.</div>
               </div>
             </div>
@@ -386,6 +396,74 @@ function FeedbackDiscussionPanel({ sr, draft, setDraft, currentSec, onEnd, onCan
           End & Save Discussion
         </button>
       </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Listing — shown when no demo is active. Lists open demos + a Start button.
+// ============================================================================
+function LiveListing() {
+  const { state, dispatch, gameName } = useStore()
+  const open = state.sessions.filter(s => !s.ended).sort((a, b) => {
+    // Sort: timer running first, then most recent date/time
+    if (a.timerRunning && !b.timerRunning) return -1
+    if (b.timerRunning && !a.timerRunning) return 1
+    const da = new Date(a.date + 'T' + (a.time || '00:00')).getTime()
+    const db = new Date(b.date + 'T' + (b.time || '00:00')).getTime()
+    return db - da
+  })
+
+  const startNew = (
+    <button
+      onClick={() => dispatch({ type: 'SET_MODE', mode: 'setup' })}
+      className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
+    >
+      + Start New Demo
+    </button>
+  )
+
+  if (open.length === 0) {
+    return (
+      <div className="px-4 pt-4 space-y-4">
+        {startNew}
+        <div className="text-center text-ink-500 text-sm pt-6">No demos in progress.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 pt-4 space-y-4">
+      <div className="space-y-2">
+        <h2 className="text-xs uppercase tracking-wider text-ink-400 px-1">Open demos</h2>
+        {open.map(s => {
+          const elapsed = s.timerRunning && s.timerStartedAt
+            ? Math.floor((Date.now() - s.timerStartedAt) / 1000)
+            : s.timerElapsed
+          return (
+            <button
+              key={s.id}
+              onClick={() => dispatch({ type: 'OPEN_SESSION_LIVE', id: s.id })}
+              className="w-full text-left rounded-2xl bg-ink-800 border border-accent-500/40 p-4 active:bg-ink-700"
+            >
+              <div className="flex items-center gap-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${s.timerRunning ? 'bg-accent-500 animate-pulse' : 'bg-ink-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate">{gameName(s.gameId)}</div>
+                  <div className="text-sm text-ink-300 mt-0.5">
+                    {s.time && <span>{s.time}</span>}
+                    {s.time && <span className="text-ink-500 mx-1.5">·</span>}
+                    <span>{s.date}</span>
+                  </div>
+                  <div className="text-[11px] text-ink-500 mt-0.5">{s.notes.length} notes</div>
+                </div>
+                <div className="font-mono text-xl tabular-nums">{fmtTime(elapsed)}</div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {startNew}
     </div>
   )
 }

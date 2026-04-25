@@ -13,12 +13,13 @@ export default function BottomNav() {
 
   const goTo = (tab) => {
     if (tab.id === 'review') {
-      // Always land on the session list (today by default)
+      // Always land on the demo list (today by default)
       dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })
       return
     }
-    if (tab.id === 'live' && !state.activeSessionId) {
-      dispatch({ type: 'SET_MODE', mode: 'home' })
+    if (tab.id === 'live') {
+      // Always land on the live list; click into a demo to open detail
+      dispatch({ type: 'OPEN_SESSION_LIVE', id: null })
       return
     }
     dispatch({ type: 'SET_MODE', mode: tab.id })
