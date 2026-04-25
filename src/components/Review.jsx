@@ -292,24 +292,33 @@ function ReviewBody({ session: reviewSession }) {
   const [tab, setTab] = useState('timeline')
   const [filterCats, setFilterCats] = useState([])
   const [filterDesigners, setFilterDesigners] = useState([])
-  const [mergeDuplicates, setMergeDuplicates] = useState(true)
+  const [mergeDuplicates, setMergeDuplicates] = useState(false)
   const [tsRange, setTsRange] = useState([0, 0])
   const [editNote, setEditNote] = useState(null)
+  const [search, setSearch] = useState('')
 
-  const totalSec = reviewSession.timerElapsed || Math.max(0, ...reviewSession.notes.map(n => n.timestamp))
+  // Cover every note timestamp so the default range never silently hides notes
+  // (notes can extend past timerElapsed if the timer was paused/reset/adjusted).
+  const totalSec = Math.max(
+    reviewSession.timerElapsed || 0,
+    ...reviewSession.notes.map(n => n.timestamp ?? 0),
+    0
+  )
   const range = tsRange[1] === 0 ? [0, Math.max(totalSec, 60)] : tsRange
 
   const synthNotes = useMemo(() =>
     reviewSession.notes.filter(n => n.kind !== 'feedback'), [reviewSession.notes])
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
     return reviewSession.notes.filter(n => {
       if (filterCats.length && !n.categories.some(c => filterCats.includes(c))) return false
       if (filterDesigners.length && !filterDesigners.includes(n.designerId)) return false
       if (n.timestamp < range[0] || n.timestamp > range[1]) return false
+      if (q && !(n.text || '').toLowerCase().includes(q)) return false
       return true
     })
-  }, [reviewSession.notes, filterCats, filterDesigners, range])
+  }, [reviewSession.notes, filterCats, filterDesigners, range, search])
 
   const consensus  = useMemo(() => findConsensus(synthNotes),  [synthNotes])
   const divergence = useMemo(() => findDivergence(synthNotes), [synthNotes])
@@ -368,6 +377,26 @@ function ReviewBody({ session: reviewSession }) {
 
       {tab === 'timeline' && (
         <>
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search notes…"
+              className="w-full bg-ink-800 border border-ink-700 rounded-full px-4 py-2.5 pl-10 outline-none focus:border-accent-500 text-sm"
+            />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 active:text-ink-200 text-lg leading-none"
+              >×</button>
+            )}
+          </div>
+
           <Filters
             session={reviewSession}
             filterCats={filterCats} setFilterCats={setFilterCats}

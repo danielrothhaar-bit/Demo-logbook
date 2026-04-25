@@ -1,28 +1,60 @@
 import React, { useMemo, useState } from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 import { aggregateAcrossSessions } from '../utils/synthesis.js'
+import ClickablePhoto from './ClickablePhoto.jsx'
+
+const PAGES = [
+  { id: 'trends', label: 'Game Trends' },
+  { id: 'photos', label: 'Team Photos' }
+]
 
 export default function Trends() {
   const { state, categoryColor, gameById } = useStore()
   const games = state.games
   const [gameId, setGameId] = useState(games[0]?.id || '')
+  const [page, setPage] = useState('trends')
 
-  if (games.length === 0) {
-    return (
-      <div className="px-4 pt-6">
+  return (
+    <div className="px-4 pt-3 space-y-4">
+      <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-full p-1">
+        {PAGES.map(p => (
+          <button
+            key={p.id}
+            onClick={() => setPage(p.id)}
+            className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+              page === p.id ? 'bg-accent-500 text-ink-50' : 'text-ink-200 active:bg-ink-700'
+            }`}
+          >{p.label}</button>
+        ))}
+      </div>
+
+      {page === 'photos' ? (
+        <TeamPhotos />
+      ) : games.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
           <div className="font-semibold mb-1">No games yet</div>
           <div className="text-sm text-ink-400">Add games in Admin to see trends.</div>
         </div>
-      </div>
-    )
-  }
+      ) : (
+        <GameTrends
+          games={games}
+          gameId={gameId}
+          setGameId={setGameId}
+          gameById={gameById}
+          state={state}
+          categoryColor={categoryColor}
+        />
+      )}
+    </div>
+  )
+}
 
+function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }) {
   const game = gameById(gameId) || games[0]
   const agg = useMemo(() => aggregateAcrossSessions(state.sessions, game.id), [state.sessions, game.id])
 
   return (
-    <div className="px-4 pt-3 space-y-4">
+    <>
       {/* Game switcher */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
         {games.map(g => (
@@ -85,7 +117,110 @@ export default function Trends() {
           <CategoryMix categoryCounts={agg.categoryCounts} categoryColor={categoryColor} />
         </>
       )}
-    </div>
+    </>
+  )
+}
+
+function TeamPhotos() {
+  const { state, gameById, designerById } = useStore()
+  const [filterGameId, setFilterGameId] = useState('all')
+
+  const photos = useMemo(() => {
+    const out = []
+    for (const s of state.sessions) {
+      for (const n of s.notes) {
+        if (!n.photoUrl) continue
+        const tagged = (n.categories || []).some(c => c && c.toLowerCase() === 'team photo')
+        if (!tagged) continue
+        out.push({
+          key: n.id,
+          photoUrl: n.photoUrl,
+          gameId: s.gameId,
+          gameName: gameById(s.gameId)?.name || '(deleted game)',
+          date: s.date,
+          time: s.time,
+          designer: designerById(n.designerId),
+          text: n.text
+        })
+      }
+    }
+    // Most recent first (date string is YYYY-MM-DD so lexicographic sort works)
+    return out.sort((a, b) => {
+      const d = (b.date || '').localeCompare(a.date || '')
+      return d !== 0 ? d : (b.time || '').localeCompare(a.time || '')
+    })
+  }, [state.sessions])
+
+  const visible = filterGameId === 'all'
+    ? photos
+    : photos.filter(p => p.gameId === filterGameId)
+
+  const games = [...new Map(photos.map(p => [p.gameId, { id: p.gameId, name: p.gameName }])).values()]
+
+  if (photos.length === 0) {
+    return (
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-6 text-center">
+        <div className="text-3xl mb-2">📸</div>
+        <div className="font-semibold mb-1">No team photos yet</div>
+        <div className="text-sm text-ink-400 leading-relaxed">
+          Tag a note with <span className="font-mono text-ink-200">Team Photo</span> and attach a photo. Photos with this tag from any demo will show up here.
+          <br />
+          Add the tag in <span className="text-ink-200">Admin → Quick tags</span> if it doesn't exist yet.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {games.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+          <button
+            onClick={() => setFilterGameId('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+              filterGameId === 'all' ? 'bg-accent-500 text-ink-50 border-accent-500' : 'bg-ink-800 border-ink-700 text-ink-200'
+            }`}
+          >All ({photos.length})</button>
+          {games.map(g => {
+            const count = photos.filter(p => p.gameId === g.id).length
+            return (
+              <button
+                key={g.id}
+                onClick={() => setFilterGameId(g.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+                  filterGameId === g.id ? 'bg-accent-500 text-ink-50 border-accent-500' : 'bg-ink-800 border-ink-700 text-ink-200'
+                }`}
+              >{g.name} ({count})</button>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="text-xs text-ink-400 px-1">{visible.length} photo{visible.length === 1 ? '' : 's'}</div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {visible.map(p => (
+          <div key={p.key} className="rounded-2xl overflow-hidden bg-ink-800 border border-ink-700">
+            <ClickablePhoto src={p.photoUrl} className="w-full aspect-square object-cover block" />
+            <div className="p-2.5">
+              <div className="text-xs font-semibold text-ink-100 truncate">{p.gameName}</div>
+              <div className="text-[11px] text-ink-400 mt-0.5">
+                {p.date}{p.time && ` · ${p.time}`}
+              </div>
+              {p.designer && (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <span
+                    className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-ink-950"
+                    style={{ backgroundColor: p.designer.color }}
+                  >{p.designer.initials}</span>
+                  <span className="text-[11px] text-ink-300 truncate">{p.designer.name}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 

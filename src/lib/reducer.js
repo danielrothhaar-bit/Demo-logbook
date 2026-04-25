@@ -400,17 +400,19 @@ export function reducer(state, action) {
         timerAdjustment: 0
       }))
     case 'TIMER_ADJUST': {
+      // delta > 0 means "give the demo more time" (countdown gets bigger).
+      // delta < 0 means "take time away" (countdown shrinks / overtime grows).
       const delta = action.delta || 0
       if (!delta) return state
       return mapSession(state, action.sessionId, s => {
         const newAdjustment = (s.timerAdjustment || 0) + delta
         if (s.timerRunning && s.timerStartedAt) {
-          // Shift the start backward (for +) or forward (for -) so live elapsed reflects the change
-          return { ...s, timerStartedAt: s.timerStartedAt - delta * 1000, timerAdjustment: newAdjustment }
+          // Push start later for +delta so less time has elapsed, earlier for -delta.
+          return { ...s, timerStartedAt: s.timerStartedAt + delta * 1000, timerAdjustment: newAdjustment }
         }
         return {
           ...s,
-          timerElapsed: Math.max(0, (s.timerElapsed || 0) + delta),
+          timerElapsed: (s.timerElapsed || 0) - delta,
           timerAdjustment: newAdjustment
         }
       })

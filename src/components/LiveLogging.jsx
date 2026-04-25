@@ -5,6 +5,7 @@ import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
+import ClickablePhoto from './ClickablePhoto.jsx'
 
 const DEMO_TARGET_SEC = 60 * 60
 
@@ -40,10 +41,9 @@ export default function LiveLogging() {
   const displaySec = isOvertime ? currentSec - DEMO_TARGET_SEC : DEMO_TARGET_SEC - currentSec
 
   const adjustTimer = (deltaSec) => {
-    // Clamp so we never drive elapsed below 0; the recorded delta matches the actual change.
-    const actual = Math.max(-currentSec, deltaSec)
-    if (!actual) return
-    dispatch({ type: 'TIMER_ADJUST', sessionId: activeSession.id, delta: actual })
+    // deltaSec > 0: give the demo more time. < 0: take time away.
+    if (!deltaSec) return
+    dispatch({ type: 'TIMER_ADJUST', sessionId: activeSession.id, delta: deltaSec })
   }
 
   const togglePick = (c) => {
@@ -190,9 +190,8 @@ export default function LiveLogging() {
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => adjustTimer(-60)}
-                disabled={currentSec <= 0}
-                aria-label="Subtract one minute"
-                className="w-12 h-12 rounded-full bg-ink-700 text-ink-100 active:bg-ink-600 flex flex-col items-center justify-center leading-none disabled:opacity-40"
+                aria-label="Remove one minute from the demo"
+                className="w-12 h-12 rounded-full bg-ink-700 text-ink-100 active:bg-ink-600 flex flex-col items-center justify-center leading-none"
               >
                 <span className="text-2xl font-bold">−</span>
                 <span className="text-[9px] font-medium tracking-wider opacity-75">1 MIN</span>
@@ -204,7 +203,7 @@ export default function LiveLogging() {
               </div>
               <button
                 onClick={() => adjustTimer(60)}
-                aria-label="Add one minute"
+                aria-label="Add one minute to the demo"
                 className="w-12 h-12 rounded-full bg-ink-700 text-ink-100 active:bg-ink-600 flex flex-col items-center justify-center leading-none"
               >
                 <span className="text-2xl font-bold">+</span>
@@ -309,7 +308,7 @@ export default function LiveLogging() {
             </form>
             {pendingPhoto && (
               <div className="mt-2 flex items-center gap-2">
-                <img src={pendingPhoto} alt="" className="w-12 h-12 rounded object-cover" />
+                <ClickablePhoto src={pendingPhoto} className="w-12 h-12 rounded object-cover" />
                 <span className="text-xs text-ink-400 flex-1">Photo will attach to next saved note</span>
                 <button onClick={() => setPendingPhoto(null)} className="text-xs text-rose-300 active:text-rose-400">Remove</button>
               </div>

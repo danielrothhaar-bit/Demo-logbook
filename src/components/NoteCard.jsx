@@ -1,6 +1,7 @@
 import React from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 import FeedbackBreakdown from './FeedbackBreakdown.jsx'
+import ClickablePhoto from './ClickablePhoto.jsx'
 
 export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
   const { categoryColor, designerById, state, gameById } = useStore()
@@ -91,7 +92,7 @@ export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
       )}
 
       {note.photoUrl && (
-        <img src={note.photoUrl} alt="" className="mt-2 rounded-lg max-h-48 w-full object-cover" />
+        <ClickablePhoto src={note.photoUrl} className="mt-2 rounded-lg max-h-48 w-full object-cover" />
       )}
     </div>
   )
