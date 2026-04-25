@@ -194,7 +194,7 @@ export default function NoteEditor({ note, sessionId, onClose }) {
           <button onClick={onClose}
             className="px-4 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
           <button onClick={save} disabled={!tsValid || !text.trim()}
-            className="px-5 py-3 rounded-xl bg-accent-500 active:bg-accent-600 disabled:opacity-40 text-ink-50 font-bold">Save</button>
+            className="px-5 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-40 text-ink-950 font-bold">Save</button>
         </div>
       </div>
     </div>

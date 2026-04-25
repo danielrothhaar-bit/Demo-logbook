@@ -140,7 +140,7 @@ export default function SessionSetup() {
         <button
           onClick={submit}
           disabled={!gameId}
-          className="flex-[2] py-4 rounded-2xl bg-accent-500 active:bg-accent-600 disabled:opacity-40 text-ink-50 font-bold"
+          className="flex-[2] py-4 rounded-2xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-40 text-ink-950 font-bold"
         >Start Logging</button>
       </div>
     </div>

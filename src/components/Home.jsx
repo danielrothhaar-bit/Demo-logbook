@@ -11,7 +11,7 @@ export default function Home() {
     <div className="px-4 pt-4 space-y-6">
       <button
         onClick={() => dispatch({ type: 'SET_MODE', mode: 'setup' })}
-        className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
+        className="w-full rounded-2xl bg-emerald-500 active:bg-emerald-600 text-ink-950 py-5 font-bold text-lg shadow-lg shadow-emerald-500/20"
       >
         + Start New Demo
       </button>

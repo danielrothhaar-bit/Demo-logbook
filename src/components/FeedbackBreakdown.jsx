@@ -9,12 +9,12 @@ export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
   const analysis = useMemo(() => analyzeFeedback(note.text), [note.text])
 
   return (
-    <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/5 p-3 animate-fadeUp">
+    <div className="rounded-2xl border border-blue-400/30 bg-blue-500/5 p-3 animate-fadeUp">
       <div className="flex items-center gap-2 mb-2">
         <span className="font-mono text-xs tabular-nums text-ink-400 bg-ink-900 rounded px-1.5 py-0.5">
           {fmtTime(note.timestamp)}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-cyan-300 bg-cyan-500/15 rounded-full px-2 py-0.5 font-semibold">
+        <span className="text-[10px] uppercase tracking-wider text-blue-300 bg-blue-500/15 rounded-full px-2 py-0.5 font-semibold">
           Feedback Discussion
         </span>
         {designer && (
@@ -57,6 +57,19 @@ export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
         {' '}{analysis.answers.length} guest response{analysis.answers.length === 1 ? '' : 's'}
       </div>
 
+      {/* Audio playback */}
+      {note.audioUrl && (
+        <div className="mb-2">
+          <div className="text-[10px] uppercase tracking-wider text-blue-300/80 mb-1">Recorded audio</div>
+          <audio
+            controls
+            src={note.audioUrl}
+            preload="metadata"
+            className="w-full h-10"
+          />
+        </div>
+      )}
+
       {/* Summary preview */}
       {analysis.summary && (
         <div className="rounded-lg bg-ink-900 border border-ink-800 p-2.5 mb-2 text-sm leading-relaxed text-ink-100">
@@ -67,7 +80,7 @@ export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
 
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full text-left text-xs text-cyan-300 active:text-cyan-400 py-1"
+        className="w-full text-left text-xs text-blue-300 active:text-blue-400 py-1"
       >
         {expanded ? '▾ Hide breakdown' : '▸ Show full Q&A breakdown'}
       </button>
@@ -78,7 +91,7 @@ export default function FeedbackBreakdown({ note, onDelete, onEdit }) {
             <div key={i}
                  className={`rounded-lg p-2 text-sm leading-snug border ${
                    it.speaker === 'designer'
-                     ? 'bg-cyan-500/10 border-cyan-400/20 text-cyan-100'
+                     ? 'bg-blue-500/10 border-blue-400/20 text-blue-100'
                      : 'bg-ink-900 border-ink-800 text-ink-100'
                  }`}>
               <span className="text-[10px] uppercase tracking-wider mr-2 font-bold opacity-70">

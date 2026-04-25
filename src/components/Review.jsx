@@ -520,7 +520,7 @@ function ReviewHeader({ session, totalSec }) {
           <button onClick={() => setEditing(false)}
             className="flex-1 py-2.5 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
           <button onClick={save}
-            className="flex-[2] py-2.5 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-bold">Save</button>
+            className="flex-[2] py-2.5 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-bold">Save</button>
         </div>
 
         <button onClick={removeSession}

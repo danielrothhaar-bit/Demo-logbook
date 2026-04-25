@@ -17,6 +17,10 @@ export default function LiveLogging() {
   const photoInputRef = useRef(null)
   const [pendingPhoto, setPendingPhoto] = useState(null)
   const [editNote, setEditNote] = useState(null)
+  const [recordingAudio, setRecordingAudio] = useState(false)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
+  const audioStreamRef = useRef(null)
 
   // Single speech-recognition instance lifted up so Save can also stop it
   const sr = useSpeechRecognition()
@@ -53,13 +57,13 @@ export default function LiveLogging() {
   }
 
   const commit = (text, opts = {}) => {
-    if (!text?.trim()) return
-    const trimmed = text.trim()
+    const trimmed = (text || '').trim()
+    if (!trimmed && !opts.audioUrl) return
     const game = gameById(activeSession.gameId)
-    const auto = opts.skipAutoTag ? [] : autoTagsFromText(trimmed, state.categories)
+    const auto = !trimmed || opts.skipAutoTag ? [] : autoTagsFromText(trimmed, state.categories)
     const merged = [...new Set([...(opts.categories ?? pickedCategories), ...auto])]
-    const puzzleIds    = opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.puzzles)
-    const componentIds = opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.components)
+    const puzzleIds    = !trimmed || opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.puzzles)
+    const componentIds = !trimmed || opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.components)
     dispatch({
       type: 'ADD_NOTE',
       sessionId: activeSession.id,
@@ -70,6 +74,7 @@ export default function LiveLogging() {
       componentIds,
       text: trimmed,
       photoUrl: opts.photoUrl ?? pendingPhoto,
+      audioUrl: opts.audioUrl ?? null,
       kind: opts.kind || 'note'
     })
     setDraft('')
@@ -77,6 +82,57 @@ export default function LiveLogging() {
     setPendingPhoto(null)
     if (photoInputRef.current) photoInputRef.current.value = ''
   }
+
+  // ---- Audio recording (feedback discussion only) ----
+  const startAudioRecording = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return
+    if (typeof MediaRecorder === 'undefined') return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current = stream
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+        .find(t => MediaRecorder.isTypeSupported?.(t)) || ''
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : undefined)
+      audioChunksRef.current = []
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      recorder.start(1000)
+      mediaRecorderRef.current = recorder
+      setRecordingAudio(true)
+    } catch (err) {
+      console.warn('Audio recording unavailable:', err)
+      // Continue without audio — the discussion still works via speech recognition.
+    }
+  }
+
+  const stopAudioRecording = ({ keep }) => new Promise((resolve) => {
+    const recorder = mediaRecorderRef.current
+    const stream = audioStreamRef.current
+    const cleanup = () => {
+      stream?.getTracks?.().forEach(t => t.stop())
+      mediaRecorderRef.current = null
+      audioStreamRef.current = null
+      audioChunksRef.current = []
+      setRecordingAudio(false)
+    }
+    if (!recorder || recorder.state === 'inactive') {
+      cleanup()
+      resolve(null)
+      return
+    }
+    recorder.onstop = () => {
+      if (!keep) { cleanup(); resolve(null); return }
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+      cleanup()
+      if (!blob.size) { resolve(null); return }
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    }
+    try { recorder.stop() } catch { cleanup(); resolve(null) }
+  })
 
   // Build mic handler — Save and tap-mic share commit logic
   const stopAndCommit = () => {
@@ -161,20 +217,24 @@ export default function LiveLogging() {
           setDraft={setDraft}
           displaySec={displaySec}
           isOvertime={isOvertime}
-          onCancel={() => {
+          recordingAudio={recordingAudio}
+          onCancel={async () => {
             sr.stop()
             sr.reset()
+            await stopAudioRecording({ keep: false })
             setDraft('')
             setDiscussionMode(false)
           }}
-          onEnd={() => {
+          onEnd={async () => {
             if (sr.isListening) sr.stop()
             const text = (sr.finalTranscript || draft).trim()
-            if (text) {
+            const audioUrl = await stopAudioRecording({ keep: true })
+            if (text || audioUrl) {
               commit(text, {
                 categories: ['Feedback Discussion'],
                 kind: 'feedback',
-                skipAutoTag: true
+                skipAutoTag: true,
+                audioUrl
               })
             }
             sr.reset()
@@ -303,7 +363,7 @@ export default function LiveLogging() {
               <button
                 type="submit"
                 disabled={!draft.trim() && !sr.finalTranscript}
-                className="px-4 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-semibold disabled:opacity-40"
+                className="px-4 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-semibold disabled:opacity-40"
               >Save</button>
             </form>
             {pendingPhoto && (
@@ -321,43 +381,44 @@ export default function LiveLogging() {
               setDiscussionMode(true)
               setDraft('')
               sr.reset()
+              startAudioRecording()
               setTimeout(() => sr.start(), 50)
             }}
-            className="w-full rounded-2xl bg-cyan-500/10 border border-cyan-400/40 active:bg-cyan-500/20 py-4 px-4 text-left"
+            className="w-full rounded-2xl bg-blue-500/15 border border-blue-400/50 active:bg-blue-500/25 py-4 px-4 text-left"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300">
+              <div className="w-10 h-10 rounded-full bg-blue-400/20 border border-blue-400/40 flex items-center justify-center text-blue-300">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <div className="font-semibold text-cyan-100">Start Feedback Discussion</div>
-                <div className="text-[12px] text-cyan-200/70">Long recording for player debrief — Q&A and ratings auto-extracted in review.</div>
+                <div className="font-semibold text-blue-100">Start Feedback Discussion</div>
+                <div className="text-[12px] text-blue-200/70">Long recording for player debrief — Q&A and ratings auto-extracted in review.</div>
               </div>
             </div>
           </button>
 
-          {/* End Demo — same prominent card style as Feedback Discussion */}
+          {/* Finish Demo — finalizes and moves to review */}
           <button
             onClick={() => {
-              if (confirm('End this demo and move to review?')) {
+              if (confirm('Finish this demo and move to review?')) {
                 dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
                 dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
               }
             }}
-            className="w-full rounded-2xl bg-rose-500/10 border border-rose-400/40 active:bg-rose-500/20 py-4 px-4 text-left"
+            className="w-full rounded-2xl bg-emerald-500/15 border border-emerald-400/50 active:bg-emerald-500/25 py-4 px-4 text-left"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-rose-400/20 border border-rose-400/40 flex items-center justify-center text-rose-300">
+              <div className="w-10 h-10 rounded-full bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                     strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
               <div className="flex-1">
-                <div className="font-semibold text-rose-100">End Demo</div>
-                <div className="text-[12px] text-rose-200/70">Stop the timer and move to review.</div>
+                <div className="font-semibold text-emerald-100">Finish Demo</div>
+                <div className="text-[12px] text-emerald-200/70">Stop the timer and move to review.</div>
               </div>
             </div>
           </button>
@@ -399,15 +460,23 @@ export default function LiveLogging() {
   )
 }
 
-function FeedbackDiscussionPanel({ sr, draft, setDraft, displaySec, isOvertime, onEnd, onCancel }) {
+function FeedbackDiscussionPanel({ sr, draft, setDraft, displaySec, isOvertime, recordingAudio, onEnd, onCancel }) {
   return (
-    <div className="rounded-3xl bg-cyan-500/10 border border-cyan-400/30 p-4 space-y-3">
+    <div className="rounded-3xl bg-blue-500/10 border border-blue-400/30 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs uppercase tracking-wider text-cyan-300 font-semibold">Feedback Discussion</div>
-          <div className="text-[11px] text-cyan-200/70">Recording the debrief — keep talking. Q&A breakdown happens in review.</div>
+          <div className="text-xs uppercase tracking-wider text-blue-300 font-semibold flex items-center gap-2">
+            Feedback Discussion
+            {recordingAudio && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-rose-300 normal-case tracking-normal font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                rec
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-blue-200/70">Recording the debrief — audio is saved with the note.</div>
         </div>
-        <span className={`font-mono text-sm tabular-nums ${isOvertime ? 'text-rose-300' : 'text-cyan-200'}`}>
+        <span className={`font-mono text-sm tabular-nums ${isOvertime ? 'text-rose-300' : 'text-blue-200'}`}>
           {isOvertime && '+'}{fmtTime(displaySec)}
         </span>
       </div>
@@ -445,7 +514,7 @@ function FeedbackDiscussionPanel({ sr, draft, setDraft, displaySec, isOvertime, 
         <button onClick={onCancel}
           className="flex-1 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
         <button onClick={onEnd}
-          className="flex-[2] py-3 rounded-xl bg-cyan-500 active:bg-cyan-600 text-ink-950 font-bold">
+          className="flex-[2] py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-bold">
           End & Save Discussion
         </button>
       </div>
@@ -470,7 +539,7 @@ function LiveListing() {
   const startNew = (
     <button
       onClick={() => dispatch({ type: 'SET_MODE', mode: 'setup' })}
-      className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-5 font-bold text-lg shadow-lg shadow-accent-500/20"
+      className="w-full rounded-2xl bg-emerald-500 active:bg-emerald-600 text-ink-950 py-5 font-bold text-lg shadow-lg shadow-emerald-500/20"
     >
       + Start New Demo
     </button>

@@ -97,7 +97,7 @@ function broadcast() {
 // ---- Express ----
 
 const app = express()
-app.use(express.json({ limit: '20mb' })) // photos arrive base64-encoded
+app.use(express.json({ limit: '60mb' })) // photos and feedback-discussion audio arrive base64-encoded
 
 app.get('/healthz', (_req, res) => res.send('ok'))
 

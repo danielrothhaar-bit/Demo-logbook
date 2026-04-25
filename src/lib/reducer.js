@@ -259,7 +259,8 @@ export function reducer(state, action) {
         notes: (s.notes || []).map(n => ({
           ...n,
           puzzleIds: n.puzzleIds || [],
-          componentIds: n.componentIds || []
+          componentIds: n.componentIds || [],
+          audioUrl: n.audioUrl ?? null
         }))
       }))
       // If active designer was deleted on another device, fall back to the first one
@@ -447,6 +448,7 @@ export function reducer(state, action) {
         componentIds: action.componentIds || [],
         text: action.text,
         photoUrl: action.photoUrl || null,
+        audioUrl: action.audioUrl || null,
         kind: action.kind || 'note',
         createdAt: action.createdAt || Date.now()
       }

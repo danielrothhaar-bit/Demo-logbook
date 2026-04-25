@@ -58,7 +58,7 @@ function DesignersPanel() {
     <div className="space-y-3">
       <button
         onClick={add}
-        className="w-full rounded-2xl bg-accent-500 active:bg-accent-600 text-ink-50 py-3.5 font-bold"
+        className="w-full rounded-2xl bg-emerald-500 active:bg-emerald-600 text-ink-950 py-3.5 font-bold"
       >+ Add Designer</button>
 
       <div className="space-y-2">
@@ -144,7 +144,7 @@ function DesignerRow({ designer }) {
         <button onClick={() => setEditing(false)}
           className="flex-1 py-2.5 rounded-xl bg-ink-700 active:bg-ink-600 text-sm">Cancel</button>
         <button onClick={save}
-          className="flex-[2] py-2.5 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-semibold">Save</button>
+          className="flex-[2] py-2.5 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-semibold">Save</button>
       </div>
     </div>
   )
@@ -181,7 +181,7 @@ function GamesPanel() {
           className="flex-1 bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 outline-none focus:border-accent-500"
         />
         <button onClick={add} disabled={!draft.trim()}
-          className="px-5 rounded-xl bg-accent-500 active:bg-accent-600 disabled:opacity-30 text-ink-50 font-semibold">
+          className="px-5 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-30 text-ink-950 font-semibold">
           Add
         </button>
       </div>
@@ -248,7 +248,7 @@ function GameRow({ game, isNewest }) {
         {editing ? (
           <>
             <button onClick={() => setEditing(false)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Cancel</button>
-            <button onClick={save} className="px-3 py-2 rounded-lg bg-accent-500 active:bg-accent-600 text-ink-50 text-sm font-semibold">Save</button>
+            <button onClick={save} className="px-3 py-2 rounded-lg bg-emerald-500 active:bg-emerald-600 text-ink-950 text-sm font-semibold">Save</button>
           </>
         ) : (
           <>
@@ -364,7 +364,7 @@ function NamedItemRow({ item, canUp, canDown, onMoveUp, onMoveDown, onSave, onDe
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
           className="flex-1 min-w-0 bg-transparent outline-none text-sm" />
         <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2">Cancel</button>
-        <button onClick={save} className="text-xs px-2 py-1 rounded-md bg-accent-500 text-ink-50 font-semibold">Save</button>
+        <button onClick={save} className="text-xs px-2 py-1 rounded-md bg-emerald-500 text-ink-950 font-semibold">Save</button>
       </div>
     )
   }
@@ -441,7 +441,7 @@ function TagsPanel() {
           className="flex-1 bg-ink-800 border border-ink-700 rounded-xl px-3 py-2.5 outline-none focus:border-accent-500"
         />
         <button onClick={add} disabled={!draft.trim()}
-          className="px-4 rounded-xl bg-accent-500 active:bg-accent-600 disabled:opacity-30 text-ink-50 font-semibold">
+          className="px-4 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-30 text-ink-950 font-semibold">
           Add
         </button>
       </div>
