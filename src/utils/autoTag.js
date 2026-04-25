@@ -6,7 +6,13 @@
 const RULES = [
   { tag: 'Game Flow Issue',    patterns: [/\bgame\s+flow\b/, /\bflow\s+issue\b/, /\bpacing\b/, /\bdrag(?:ged|ging)?\b/, /\btoo\s+slow\b/, /\btoo\s+fast\b/] },
   { tag: 'Puzzle Logic Issue', patterns: [/\bpuzzle\s+logic\b/, /\blogic\s+issue\b/, /\bdoesn't?\s+make\s+sense\b/, /\bunclear\s+(?:logic|mapping|connection)\b/, /\billogical\b/] },
-  { tag: 'Tech Issue',         patterns: [/\btech(?:nical)?\s+issue\b/, /\bbroken\b/, /\bbug(?:ged)?\b/, /\bnot\s+working\b/, /\bdidn'?t\s+(?:fire|trigger|reset)\b/, /\bglitch\b/, /\bstuck\s+(?:open|closed|on|off)\b/] },
+  { tag: 'Tech Issue',         patterns: [
+      /\btech(?:nical)?\s+issue\b/, /\bbroken\b/, /\bbug(?:ged)?\b/,
+      /\bnot\s+working\b/, /\bdidn'?t\s+(?:fire|trigger|reset)\b/, /\bglitch\b/,
+      /\bstuck\s+(?:open|closed|on|off)\b/,
+      // Override / overrode / overridden / overriding — usually a manual prop reset by GM
+      /\boverr(?:ode|ide(?:n|d|s)?|iding)\b/
+  ]},
   { tag: 'Wow Moment',         patterns: [/\bwow(?:\s+moment)?\b/, /\bamazing\b/, /\bgasp(?:ed)?\b/, /\bblew\s+(?:them|their|me)\b/, /\bcheered?\b/, /\bapplaud(?:ed)?\b/] },
   { tag: 'Frustration',        patterns: [/\bfrustrat(?:ed|ion|ing)\b/, /\bgave\s+up\b/, /\bstuck\b(?!\s+(?:open|closed|on|off))/, /\bannoyed\b/, /\blost\b/, /\bconfused\b/] },
   { tag: 'Hint',               patterns: [/\bhint(?:ed|ing)?\b/, /\bgm\s+helped\b/, /\bgame\s*master\s+helped\b/] },
@@ -17,8 +23,6 @@ const RULES = [
 
 /**
  * Scan text and return categories whose keyword rules match.
- * @param {string} text
- * @param {string[]} availableCategories - only return tags present in user's category list
  */
 export function autoTagsFromText(text, availableCategories) {
   if (!text) return []
@@ -30,4 +34,39 @@ export function autoTagsFromText(text, availableCategories) {
     if (rule.patterns.some(rx => rx.test(lc))) found.add(rule.tag)
   }
   return [...found]
+}
+
+// Build a regex that matches a name as a whole-word phrase, case-insensitively.
+// Escapes regex metacharacters in the name so "Puzzle 4" works.
+function buildNameRegex(name) {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return null
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\b${escaped}\\b`, 'i')
+}
+
+/**
+ * Return the IDs of every named item ({id, name}) whose name appears in `text`.
+ * Used for auto-attaching puzzles + components by their game-specific names.
+ */
+export function matchNamedItems(text, items) {
+  if (!text || !items?.length) return []
+  const matched = []
+  for (const item of items) {
+    const rx = buildNameRegex(item.name)
+    if (rx && rx.test(text)) matched.push(item.id)
+  }
+  return matched
+}
+
+/**
+ * Convenience: run all detection passes for a note belonging to a specific game.
+ * Returns { categories, puzzleIds, componentIds }.
+ */
+export function analyzeNoteText(text, { categories = [], game = null } = {}) {
+  return {
+    categories: autoTagsFromText(text, categories),
+    puzzleIds:    matchNamedItems(text, game?.puzzles),
+    componentIds: matchNamedItems(text, game?.components)
+  }
 }

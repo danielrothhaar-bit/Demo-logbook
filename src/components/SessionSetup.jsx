@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 
+// Round the current wall-clock to the nearest :00 or :30 (rolling forward at :15/:45).
+function nearestHalfHour() {
+  const d = new Date()
+  let h = d.getHours()
+  let m = d.getMinutes()
+  let halves = Math.round(m / 30)        // 0, 1, or 2
+  if (halves >= 2) { h = (h + 1) % 24; halves = 0 }
+  m = halves * 30
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 export default function SessionSetup() {
   const { state, dispatch, newestGame } = useStore()
   const newest = newestGame()
@@ -8,6 +19,7 @@ export default function SessionSetup() {
   const [teamSize, setTeamSize] = useState(4)
   const [experience, setExperience] = useState('experienced')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [time, setTime] = useState(() => nearestHalfHour())
 
   // If games change while open (e.g. user adds via admin), default to newest
   useEffect(() => {
@@ -21,7 +33,8 @@ export default function SessionSetup() {
       gameId,
       teamSize,
       experience,
-      date
+      date,
+      time
     })
   }
 
@@ -94,14 +107,26 @@ export default function SessionSetup() {
         </div>
       </Field>
 
-      <Field label="Date">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full bg-ink-800 border border-ink-700 rounded-xl px-4 py-3 text-base outline-none focus:border-accent-500"
-        />
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
+          />
+        </Field>
+
+        <Field label="Time">
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            step={1800}
+            className="w-full bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 text-base outline-none focus:border-accent-500"
+          />
+        </Field>
+      </div>
 
       <div className="pt-2 flex gap-3">
         <button

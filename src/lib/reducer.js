@@ -57,9 +57,36 @@ export function initialsFromName(name) {
 function seedGames() {
   const now = Date.now()
   return [
-    { id: 'g_vault', name: 'The Vault',            createdAt: now - 90 * 86400000 },
-    { id: 'g_lab',   name: 'Forgotten Lab',        createdAt: now - 30 * 86400000 },
-    { id: 'g_attic', name: "Grandmother's Attic",  createdAt: now -  7 * 86400000 }
+    {
+      id: 'g_vault', name: 'The Vault', createdAt: now - 90 * 86400000,
+      puzzles: [
+        { id: 'p_keypad',  name: 'Keypad'        },
+        { id: 'p_riddle',  name: 'Desk Riddle'   },
+        { id: 'p_p4',      name: 'Puzzle 4'      },
+        { id: 'p_vault',   name: 'Vault Door'    }
+      ],
+      components: [
+        { id: 'c_safe',    name: 'Safe'          },
+        { id: 'c_panel',   name: 'Symbol Panel'  },
+        { id: 'c_magnet',  name: 'Magnet Lock'   },
+        { id: 'c_light',   name: 'Fluorescent Light' }
+      ]
+    },
+    {
+      id: 'g_lab', name: 'Forgotten Lab', createdAt: now - 30 * 86400000,
+      puzzles: [
+        { id: 'p_centrifuge', name: 'Centrifuge Puzzle' },
+        { id: 'p_door',       name: 'Final Door'        }
+      ],
+      components: [
+        { id: 'c_audio',  name: 'Audio Cue'  },
+        { id: 'c_door',   name: 'Lab Door'   }
+      ]
+    },
+    {
+      id: 'g_attic', name: "Grandmother's Attic", createdAt: now - 7 * 86400000,
+      puzzles: [], components: []
+    }
   ]
 }
 
@@ -180,6 +207,13 @@ function mapSession(state, id, fn) {
   return { ...state, sessions: state.sessions.map(s => s.id === id ? fn(s) : s) }
 }
 
+function updateGameField(state, gameId, field, fn) {
+  return {
+    ...state,
+    games: state.games.map(g => g.id === gameId ? { ...g, [field]: fn(g[field] || []) } : g)
+  }
+}
+
 // Actions that should never sync to the server (UI / per-device state).
 export const CLIENT_ONLY_ACTIONS = new Set([
   'SET_MODE',
@@ -211,6 +245,22 @@ export function reducer(state, action) {
       for (const k of PERSISTED_KEYS) {
         if (action.state[k] !== undefined) next[k] = action.state[k]
       }
+      // Migrations: ensure newer fields exist on data persisted before they were added
+      next.games = (next.games || []).map(g => ({
+        ...g,
+        puzzles: g.puzzles || [],
+        components: g.components || []
+      }))
+      next.sessions = (next.sessions || []).map(s => ({
+        ...s,
+        time: s.time ?? '',
+        timerFirstStartedAt: s.timerFirstStartedAt ?? null,
+        notes: (s.notes || []).map(n => ({
+          ...n,
+          puzzleIds: n.puzzleIds || [],
+          componentIds: n.componentIds || []
+        }))
+      }))
       // If active designer was deleted on another device, fall back to the first one
       if (!next.designers.some(d => d.id === next.activeDesignerId)) {
         next.activeDesignerId = next.designers[0]?.id || null
@@ -244,7 +294,13 @@ export function reducer(state, action) {
 
     case 'ADD_GAME': {
       const id = action.id || ('g_' + uid())
-      return { ...state, games: [...state.games, { id, name: action.name.trim(), createdAt: action.createdAt || Date.now() }] }
+      return {
+        ...state,
+        games: [...state.games, {
+          id, name: action.name.trim(), createdAt: action.createdAt || Date.now(),
+          puzzles: [], components: []
+        }]
+      }
     }
     case 'UPDATE_GAME':
       return { ...state, games: state.games.map(g => g.id === action.id ? { ...g, ...action.patch } : g) }
@@ -254,6 +310,30 @@ export function reducer(state, action) {
       return { ...state, games: state.games.filter(g => g.id !== action.id) }
     }
 
+    // Per-game puzzles
+    case 'ADD_PUZZLE':
+      return updateGameField(state, action.gameId, 'puzzles', list => [
+        ...list, { id: action.id || ('p_' + uid()), name: action.name.trim() }
+      ])
+    case 'UPDATE_PUZZLE':
+      return updateGameField(state, action.gameId, 'puzzles', list =>
+        list.map(p => p.id === action.id ? { ...p, ...action.patch } : p))
+    case 'DELETE_PUZZLE':
+      return updateGameField(state, action.gameId, 'puzzles', list =>
+        list.filter(p => p.id !== action.id))
+
+    // Per-game components
+    case 'ADD_COMPONENT':
+      return updateGameField(state, action.gameId, 'components', list => [
+        ...list, { id: action.id || ('c_' + uid()), name: action.name.trim() }
+      ])
+    case 'UPDATE_COMPONENT':
+      return updateGameField(state, action.gameId, 'components', list =>
+        list.map(c => c.id === action.id ? { ...c, ...action.patch } : c))
+    case 'DELETE_COMPONENT':
+      return updateGameField(state, action.gameId, 'components', list =>
+        list.filter(c => c.id !== action.id))
+
     case 'CREATE_SESSION': {
       const session = {
         id: action.id || uid(),
@@ -261,10 +341,12 @@ export function reducer(state, action) {
         teamSize: action.teamSize,
         experience: action.experience,
         date: action.date,
+        time: action.time || '',
         sessionCode: action.sessionCode || genCode(),
         timerElapsed: 0,
         timerRunning: false,
         timerStartedAt: null,
+        timerFirstStartedAt: null,
         ended: false,
         notes: []
       }
@@ -277,10 +359,30 @@ export function reducer(state, action) {
     }
     case 'UPDATE_SESSION_META':
       return mapSession(state, action.sessionId, s => ({ ...s, ...action.patch }))
+    case 'DELETE_SESSION': {
+      const next = { ...state, sessions: state.sessions.filter(s => s.id !== action.sessionId) }
+      if (next.activeSessionId === action.sessionId) next.activeSessionId = null
+      if (next.reviewSessionId === action.sessionId) next.reviewSessionId = null
+      return next
+    }
+    case 'RESTART_SESSION': {
+      const session = state.sessions.find(s => s.id === action.sessionId)
+      if (!session) return state
+      return {
+        ...mapSession(state, action.sessionId, s => ({ ...s, ended: false })),
+        activeSessionId: action.sessionId,
+        reviewSessionId: null,
+        mode: 'live'
+      }
+    }
     case 'TIMER_START':
       return mapSession(state, action.sessionId, s => ({
-        ...s, timerRunning: true,
-        timerStartedAt: action.startedAt || (Date.now() - s.timerElapsed * 1000)
+        ...s,
+        timerRunning: true,
+        timerStartedAt: action.startedAt || (Date.now() - s.timerElapsed * 1000),
+        // Real-world wall-clock time the run actually began. Set once and never
+        // overwritten — pause/resume must not reset this.
+        timerFirstStartedAt: s.timerFirstStartedAt || (action.startedAt || Date.now())
       }))
     case 'TIMER_PAUSE':
       return mapSession(state, action.sessionId, s => {
@@ -292,7 +394,7 @@ export function reducer(state, action) {
       })
     case 'TIMER_RESET':
       return mapSession(state, action.sessionId, s => ({
-        ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null
+        ...s, timerRunning: false, timerElapsed: 0, timerStartedAt: null, timerFirstStartedAt: null
       }))
     case 'END_SESSION':
       return mapSession(state, action.sessionId, s => ({
@@ -311,6 +413,8 @@ export function reducer(state, action) {
         timestamp: action.timestamp,
         designerId: action.designerId,
         categories: action.categories || [],
+        puzzleIds: action.puzzleIds || [],
+        componentIds: action.componentIds || [],
         text: action.text,
         photoUrl: action.photoUrl || null,
         kind: action.kind || 'note',

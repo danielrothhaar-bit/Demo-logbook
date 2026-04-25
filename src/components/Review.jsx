@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
+import NoteEditor from './NoteEditor.jsx'
 import {
   findConsensus, findDivergence, findDuplicates, summarize
 } from '../utils/synthesis.js'
@@ -11,29 +12,216 @@ const TABS = [
   { id: 'summary', label: 'Summary' }
 ]
 
+const todayISO = () => new Date().toISOString().slice(0, 10)
+
 export default function Review() {
   const { reviewSession } = useStore()
   if (!reviewSession) {
-    return (
-      <div className="px-4 pt-6">
-        <SessionPicker />
-      </div>
-    )
+    return <SessionPicker />
   }
   return <ReviewBody session={reviewSession} />
 }
 
+// ============================================================================
+// Landing list — defaults to today's sessions, with date + game filters
+// ============================================================================
+
+function SessionPicker() {
+  const { state, dispatch, gameName, designerById } = useStore()
+
+  const [filterGameIds, setFilterGameIds] = useState([])
+  const [dateFrom, setDateFrom] = useState(todayISO())
+  const [dateTo,   setDateTo]   = useState(todayISO())
+  const [filterDesignerIds, setFilterDesignerIds] = useState([])
+
+  const toggle = (arr, setter, v) =>
+    setter(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
+
+  const filtered = useMemo(() => {
+    return state.sessions
+      .filter(s => filterGameIds.length === 0 || filterGameIds.includes(s.gameId))
+      .filter(s => !dateFrom || s.date >= dateFrom)
+      .filter(s => !dateTo   || s.date <= dateTo)
+      .filter(s => {
+        if (filterDesignerIds.length === 0) return true
+        const sessionDesigners = new Set(s.notes.map(n => n.designerId))
+        return filterDesignerIds.some(d => sessionDesigners.has(d))
+      })
+      .sort((a, b) => {
+        const d = new Date(b.date).getTime() - new Date(a.date).getTime()
+        return d !== 0 ? d : (b.timerFirstStartedAt || 0) - (a.timerFirstStartedAt || 0)
+      })
+  }, [state.sessions, filterGameIds, dateFrom, dateTo, filterDesignerIds])
+
+  const setRange = (days) => {
+    const today = todayISO()
+    if (days === 0) { setDateFrom(today); setDateTo(today); return }
+    if (days === Infinity) { setDateFrom(''); setDateTo(''); return }
+    const d = new Date()
+    d.setDate(d.getDate() - days)
+    setDateFrom(d.toISOString().slice(0, 10))
+    setDateTo(today)
+  }
+
+  const isToday = dateFrom === todayISO() && dateTo === todayISO()
+
+  return (
+    <div className="px-4 pt-3 space-y-3">
+      {/* Quick range chips */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+        {[
+          { label: 'Today', test: () => isToday, days: 0 },
+          { label: 'Last 7d', days: 7 },
+          { label: 'Last 30d', days: 30 },
+          { label: 'All', days: Infinity }
+        ].map(({ label, days }) => (
+          <button key={label} onClick={() => setRange(days)}
+            className="px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700">
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <details className="rounded-2xl bg-ink-800/60 border border-ink-700">
+        <summary className="px-4 py-3 cursor-pointer text-sm font-medium flex items-center justify-between">
+          <span>Filters</span>
+          <span className="text-xs text-ink-400">
+            {(filterGameIds.length + filterDesignerIds.length > 0)
+              ? `${filterGameIds.length + filterDesignerIds.length} active`
+              : (isToday ? 'today' : 'custom')}
+          </span>
+        </summary>
+        <div className="px-4 pb-4 space-y-3">
+          <div>
+            <div className="text-xs text-ink-400 mb-1">Date range</div>
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-2 py-2 text-sm" />
+              <span className="text-ink-500">→</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-2 py-2 text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-ink-400 mb-1">Game</div>
+            <div className="flex flex-wrap gap-1.5">
+              {state.games.map(g => {
+                const active = filterGameIds.includes(g.id)
+                return (
+                  <button key={g.id} onClick={() => toggle(filterGameIds, setFilterGameIds, g.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                      active ? 'bg-accent-500 border-accent-500 text-ink-50' : 'bg-ink-900 border-ink-700 text-ink-200'
+                    }`}>
+                    {g.name}
+                  </button>
+                )
+              })}
+              {state.games.length === 0 && <span className="text-xs text-ink-500">No games yet — add in Admin.</span>}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-ink-400 mb-1">Designer</div>
+            <div className="flex flex-wrap gap-1.5">
+              {state.designers.map(d => {
+                const active = filterDesignerIds.includes(d.id)
+                return (
+                  <button key={d.id} onClick={() => toggle(filterDesignerIds, setFilterDesignerIds, d.id)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
+                      active ? 'border-transparent text-ink-950' : 'border-ink-700 text-ink-200'
+                    }`}
+                    style={active ? { backgroundColor: d.color } : {}}>
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                    {d.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div className="text-xs text-ink-400 px-1">
+        {filtered.length} of {state.sessions.length} sessions
+        {isToday && filtered.length === 0 && state.sessions.length > 0 &&
+          <> — <button onClick={() => setRange(Infinity)} className="text-accent-400 active:text-accent-500">show all</button></>}
+      </div>
+
+      <div className="space-y-2">
+        {filtered.map(s => {
+          const sessionDesigners = [...new Set(s.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
+          return (
+            <div key={s.id} className="rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+              <button
+                onClick={() => dispatch({ type: 'OPEN_SESSION_REVIEW', id: s.id })}
+                className="w-full text-left p-4 active:bg-ink-700"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate flex items-center gap-2">
+                      {gameName(s.gameId)}
+                      {!s.ended && <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" /> Live
+                      </span>}
+                    </div>
+                    <div className="text-xs text-ink-400 mt-0.5">
+                      {s.date}{s.time ? ` · ${s.time}` : ''} · team {s.teamSize} · {s.experience} · {s.notes.length} notes
+                    </div>
+                  </div>
+                  <div className="flex -space-x-2">
+                    {sessionDesigners.map(d => (
+                      <span key={d.id}
+                        className="w-7 h-7 rounded-full border-2 border-ink-800 flex items-center justify-center text-[10px] font-bold text-ink-950"
+                        style={{ backgroundColor: d.color }}>
+                        {d.initials}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </button>
+              {s.ended && (
+                <div className="border-t border-ink-700 px-3 py-2 flex items-center justify-end gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`Restart "${gameName(s.gameId)}" session and resume in Live?`)) {
+                        dispatch({ type: 'RESTART_SESSION', sessionId: s.id })
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 active:bg-emerald-500/25 font-medium"
+                  >
+                    Restart session
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div className="text-ink-500 text-sm text-center py-6">No sessions match the filters.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Single-session review
+// ============================================================================
+
 function ReviewBody({ session: reviewSession }) {
+  const { dispatch } = useStore()
   const [tab, setTab] = useState('timeline')
   const [filterCats, setFilterCats] = useState([])
   const [filterDesigners, setFilterDesigners] = useState([])
   const [mergeDuplicates, setMergeDuplicates] = useState(true)
   const [tsRange, setTsRange] = useState([0, 0])
+  const [editNote, setEditNote] = useState(null)
 
   const totalSec = reviewSession.timerElapsed || Math.max(0, ...reviewSession.notes.map(n => n.timestamp))
   const range = tsRange[1] === 0 ? [0, Math.max(totalSec, 60)] : tsRange
 
-  // Synthesis only operates on regular notes — feedback transcripts shouldn't dominate clusters
   const synthNotes = useMemo(() =>
     reviewSession.notes.filter(n => n.kind !== 'feedback'), [reviewSession.notes])
 
@@ -46,10 +234,10 @@ function ReviewBody({ session: reviewSession }) {
     })
   }, [reviewSession.notes, filterCats, filterDesigners, range])
 
-  const consensus = useMemo(() => findConsensus(synthNotes), [synthNotes])
+  const consensus  = useMemo(() => findConsensus(synthNotes),  [synthNotes])
   const divergence = useMemo(() => findDivergence(synthNotes), [synthNotes])
   const duplicates = useMemo(() => findDuplicates(synthNotes), [synthNotes])
-  const summary = useMemo(() => summarize(synthNotes), [synthNotes])
+  const summary    = useMemo(() => summarize(synthNotes),      [synthNotes])
 
   const timeline = useMemo(() => {
     const dupNoteIds = new Set()
@@ -75,6 +263,18 @@ function ReviewBody({ session: reviewSession }) {
 
   return (
     <div className="px-4 pt-3 space-y-3">
+      {/* Big red Back button — out of the header card */}
+      <button
+        onClick={() => dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })}
+        className="w-full rounded-2xl bg-rose-500/15 border border-rose-400/40 active:bg-rose-500/25 py-3.5 px-4 flex items-center gap-3 text-rose-100"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        <span className="font-semibold">Back to sessions</span>
+      </button>
+
       <ReviewHeader session={reviewSession} totalSec={totalSec} />
 
       <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-full p-1">
@@ -108,7 +308,8 @@ function ReviewBody({ session: reviewSession }) {
             )}
             {timeline.map(item => (
               item.kind === 'note'
-                ? <NoteCard key={item.id} note={item.note} />
+                ? <NoteCard key={item.id} note={item.note}
+                    onEdit={() => setEditNote(item.note)} />
                 : <MergedCard key={item.id} group={item.group} />
             ))}
           </div>
@@ -116,147 +317,16 @@ function ReviewBody({ session: reviewSession }) {
       )}
 
       {tab === 'synthesis' && (
-        <Synthesis
-          consensus={consensus}
-          divergence={divergence}
-          duplicates={duplicates}
-        />
+        <Synthesis consensus={consensus} divergence={divergence} duplicates={duplicates} />
       )}
 
       {tab === 'summary' && (
         <Summary summary={summary} session={reviewSession} />
       )}
-    </div>
-  )
-}
 
-function SessionPicker() {
-  const { state, dispatch, gameName, designerById } = useStore()
-
-  const [filterGameIds, setFilterGameIds] = useState([])
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [filterDesignerIds, setFilterDesignerIds] = useState([])
-
-  const toggle = (arr, setter, v) => setter(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
-
-  const filtered = useMemo(() => {
-    return state.sessions
-      .filter(s => filterGameIds.length === 0 || filterGameIds.includes(s.gameId))
-      .filter(s => !dateFrom || s.date >= dateFrom)
-      .filter(s => !dateTo || s.date <= dateTo)
-      .filter(s => {
-        if (filterDesignerIds.length === 0) return true
-        const sessionDesigners = new Set(s.notes.map(n => n.designerId))
-        return filterDesignerIds.some(d => sessionDesigners.has(d))
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [state.sessions, filterGameIds, dateFrom, dateTo, filterDesignerIds])
-
-  const clear = () => {
-    setFilterGameIds([])
-    setDateFrom('')
-    setDateTo('')
-    setFilterDesignerIds([])
-  }
-  const hasFilters = filterGameIds.length || dateFrom || dateTo || filterDesignerIds.length
-
-  return (
-    <div>
-      <div className="text-sm text-ink-300 mb-3">Pick a session to review:</div>
-
-      <details className="rounded-2xl bg-ink-800/60 border border-ink-700 mb-3" open>
-        <summary className="px-4 py-3 cursor-pointer text-sm font-medium flex items-center justify-between">
-          <span>Filters</span>
-          {hasFilters && (
-            <button onClick={(e) => { e.preventDefault(); clear() }}
-              className="text-xs text-rose-300 active:text-rose-400">Clear</button>
-          )}
-        </summary>
-        <div className="px-4 pb-4 space-y-3">
-          <div>
-            <div className="text-xs text-ink-400 mb-1">Game</div>
-            <div className="flex flex-wrap gap-1.5">
-              {state.games.map(g => {
-                const active = filterGameIds.includes(g.id)
-                return (
-                  <button key={g.id} onClick={() => toggle(filterGameIds, setFilterGameIds, g.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
-                      active ? 'bg-accent-500 border-accent-500 text-ink-50' : 'bg-ink-900 border-ink-700 text-ink-200'
-                    }`}>
-                    {g.name}
-                  </button>
-                )
-              })}
-              {state.games.length === 0 && <span className="text-xs text-ink-500">No games yet — add in Admin.</span>}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs text-ink-400 mb-1">Date range</div>
-            <div className="flex items-center gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-2 py-2 text-sm" />
-              <span className="text-ink-500">→</span>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-2 py-2 text-sm" />
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs text-ink-400 mb-1">Designer</div>
-            <div className="flex flex-wrap gap-1.5">
-              {state.designers.map(d => {
-                const active = filterDesignerIds.includes(d.id)
-                return (
-                  <button key={d.id} onClick={() => toggle(filterDesignerIds, setFilterDesignerIds, d.id)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
-                      active ? 'border-transparent text-ink-950' : 'border-ink-700 text-ink-200'
-                    }`}
-                    style={active ? { backgroundColor: d.color } : {}}>
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
-                    {d.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <div className="text-xs text-ink-400 px-1 mb-2">{filtered.length} of {state.sessions.length} sessions</div>
-
-      <div className="space-y-2">
-        {filtered.map(s => {
-          const sessionDesigners = [...new Set(s.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
-          return (
-            <button key={s.id}
-              onClick={() => dispatch({ type: 'OPEN_SESSION_REVIEW', id: s.id })}
-              className="w-full text-left rounded-2xl bg-ink-800 border border-ink-700 p-4 active:bg-ink-700">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{gameName(s.gameId)}</div>
-                  <div className="text-xs text-ink-400 mt-0.5">
-                    {s.date} · team {s.teamSize} · {s.experience} · {s.notes.length} notes
-                  </div>
-                </div>
-                <div className="flex -space-x-2">
-                  {sessionDesigners.map(d => (
-                    <span key={d.id}
-                      className="w-7 h-7 rounded-full border-2 border-ink-800 flex items-center justify-center text-[10px] font-bold text-ink-950"
-                      style={{ backgroundColor: d.color }}>
-                      {d.initials}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </button>
-          )
-        })}
-        {filtered.length === 0 && (
-          <div className="text-ink-500 text-sm text-center py-6">No sessions match the filters.</div>
-        )}
-      </div>
+      {editNote && (
+        <NoteEditor note={editNote} sessionId={reviewSession.id} onClose={() => setEditNote(null)} />
+      )}
     </div>
   )
 }
@@ -268,16 +338,27 @@ function ReviewHeader({ session, totalSec }) {
   const [teamSize, setTeamSize] = useState(session.teamSize)
   const [experience, setExperience] = useState(session.experience)
   const [date, setDate] = useState(session.date)
+  const [time, setTime] = useState(session.time || '')
 
   const designers = [...new Set(session.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
+
+  const startedAtClock = session.timerFirstStartedAt
+    ? new Date(session.timerFirstStartedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null
 
   const save = () => {
     dispatch({
       type: 'UPDATE_SESSION_META',
       sessionId: session.id,
-      patch: { gameId, teamSize, experience, date }
+      patch: { gameId, teamSize, experience, date, time }
     })
     setEditing(false)
+  }
+
+  const removeSession = () => {
+    if (!confirm(`Permanently delete this ${gameName(session.gameId)} session and all its ${session.notes.length} notes? This cannot be undone.`)) return
+    dispatch({ type: 'DELETE_SESSION', sessionId: session.id })
+    dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })
   }
 
   if (editing) {
@@ -316,17 +397,30 @@ function ReviewHeader({ session, totalSec }) {
             ))}
           </div>
         </div>
-        <div>
-          <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Date</div>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Date</div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time</div>
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={1800}
+              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+          </div>
         </div>
+
         <div className="flex gap-2 pt-1">
           <button onClick={() => setEditing(false)}
             className="flex-1 py-2.5 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
           <button onClick={save}
             className="flex-[2] py-2.5 rounded-xl bg-accent-500 active:bg-accent-600 text-ink-50 font-bold">Save</button>
         </div>
+
+        <button onClick={removeSession}
+          className="w-full py-3 rounded-xl bg-rose-500/10 border border-rose-500/40 active:bg-rose-500/20 text-rose-200 font-semibold">
+          Delete this session
+        </button>
       </div>
     )
   }
@@ -337,11 +431,14 @@ function ReviewHeader({ session, totalSec }) {
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-lg">{gameName(session.gameId)}</div>
           <div className="text-xs text-ink-400 mt-0.5">
-            {session.date} · team {session.teamSize} · {session.experience}
+            {session.date}{session.time ? ` · scheduled ${session.time}` : ''} · team {session.teamSize} · {session.experience}
           </div>
           <div className="text-xs text-ink-400 mt-0.5 font-mono">
             Code {session.sessionCode} · {fmtTime(totalSec)} elapsed
           </div>
+          {startedAtClock && (
+            <div className="text-xs text-ink-400 mt-0.5">Actual start: {startedAtClock}</div>
+          )}
         </div>
         <div className="flex -space-x-2">
           {designers.map(d => (
@@ -353,9 +450,7 @@ function ReviewHeader({ session, totalSec }) {
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-between mt-2">
-        <button onClick={() => dispatch({ type: 'SET_MODE', mode: 'home' })}
-          className="text-xs text-accent-400 active:text-accent-500">← Back</button>
+      <div className="flex items-center justify-end mt-2">
         <button onClick={() => setEditing(true)}
           className="text-xs text-ink-300 active:text-ink-100 px-2 py-1 rounded-lg bg-ink-700 active:bg-ink-600">
           Edit details

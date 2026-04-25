@@ -12,11 +12,9 @@ export default function BottomNav() {
   ]
 
   const goTo = (tab) => {
-    if (tab.id === 'review' && !state.reviewSessionId) {
-      // default to most recent ended session
-      const recent = state.sessions.find(s => s.ended) || state.sessions[0]
-      if (recent) dispatch({ type: 'OPEN_SESSION_REVIEW', id: recent.id })
-      else dispatch({ type: 'SET_MODE', mode: 'review' })
+    if (tab.id === 'review') {
+      // Always land on the session list (today by default)
+      dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })
       return
     }
     if (tab.id === 'live' && !state.activeSessionId) {

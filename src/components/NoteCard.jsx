@@ -2,14 +2,26 @@ import React from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 import FeedbackBreakdown from './FeedbackBreakdown.jsx'
 
-export default function NoteCard({ note, onDelete, dimWhenOther }) {
-  const { categoryColor, designerById, state } = useStore()
+export default function NoteCard({ note, onDelete, onEdit, dimWhenOther }) {
+  const { categoryColor, designerById, state, gameById } = useStore()
   const designer = designerById(note.designerId)
   const isMine = note.designerId === state.activeDesignerId
 
   if (note.kind === 'feedback') {
-    return <FeedbackBreakdown note={note} onDelete={onDelete && isMine ? onDelete : undefined} />
+    return <FeedbackBreakdown note={note} onDelete={onDelete} onEdit={onEdit} />
   }
+
+  // Resolve puzzle/component names from any session this note might belong to
+  // (the parent passes the right session implicitly via the note's session ownership).
+  const findGame = () => {
+    for (const s of state.sessions) {
+      if (s.notes.some(n => n.id === note.id)) return gameById(s.gameId)
+    }
+    return null
+  }
+  const game = findGame()
+  const puzzleNames    = (note.puzzleIds    || []).map(id => game?.puzzles   ?.find(p => p.id === id)?.name).filter(Boolean)
+  const componentNames = (note.componentIds || []).map(id => game?.components?.find(c => c.id === id)?.name).filter(Boolean)
 
   return (
     <div className={`rounded-2xl p-3 border animate-fadeUp ${
@@ -36,7 +48,19 @@ export default function NoteCard({ note, onDelete, dimWhenOther }) {
             </span>
           ))}
         </div>
-        {onDelete && isMine && (
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="text-ink-500 active:text-ink-200 px-2 -mr-1"
+            aria-label="Edit note"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+        )}
+        {onDelete && !onEdit && isMine && (
           <button
             onClick={onDelete}
             className="text-ink-500 active:text-rose-400 px-2 -mr-1"
@@ -50,6 +74,22 @@ export default function NoteCard({ note, onDelete, dimWhenOther }) {
         )}
       </div>
       <div className="text-[15px] leading-snug text-ink-50 break-words">{note.text}</div>
+
+      {(puzzleNames.length > 0 || componentNames.length > 0) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {puzzleNames.map(n => (
+            <span key={'p-' + n} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-400/30 text-violet-200 font-medium">
+              🧩 {n}
+            </span>
+          ))}
+          {componentNames.map(n => (
+            <span key={'c-' + n} className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/15 border border-pink-400/30 text-pink-200 font-medium">
+              ⚙ {n}
+            </span>
+          ))}
+        </div>
+      )}
+
       {note.photoUrl && (
         <img src={note.photoUrl} alt="" className="mt-2 rounded-lg max-h-48 w-full object-cover" />
       )}

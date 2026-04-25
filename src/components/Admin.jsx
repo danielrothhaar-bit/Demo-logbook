@@ -197,10 +197,13 @@ function GamesPanel() {
 function GameRow({ game, isNewest }) {
   const { state, dispatch } = useStore()
   const [editing, setEditing] = useState(false)
+  const [open, setOpen] = useState(false)
   const [name, setName] = useState(game.name)
 
   const sessionCount = state.sessions.filter(s => s.gameId === game.id).length
   const inUse = sessionCount > 0
+  const puzzles = game.puzzles || []
+  const components = game.components || []
 
   const save = () => {
     const v = name.trim()
@@ -210,43 +213,142 @@ function GameRow({ game, isNewest }) {
   }
 
   return (
-    <div className="rounded-2xl bg-ink-800 border border-ink-700 p-3 flex items-center gap-3">
-      <div className="flex-1 min-w-0">
+    <div className="rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+      <div className="p-3 flex items-center gap-3">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-8 h-8 rounded-lg bg-ink-900 border border-ink-700 active:bg-ink-700 flex items-center justify-center"
+          aria-label={open ? 'Collapse' : 'Expand'}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' , transition: 'transform 150ms' }}>
+            <polyline points="9 6 15 12 9 18" />
+          </svg>
+        </button>
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <input
+              autoFocus value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+              className="w-full bg-ink-900 border border-accent-500 rounded-lg px-3 py-2 outline-none"
+            />
+          ) : (
+            <>
+              <div className="font-semibold truncate flex items-center gap-2">
+                {game.name}
+                {isNewest && <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-bold">newest</span>}
+              </div>
+              <div className="text-xs text-ink-400">
+                {sessionCount} session{sessionCount === 1 ? '' : 's'} · {puzzles.length} puzzle{puzzles.length === 1 ? '' : 's'} · {components.length} component{components.length === 1 ? '' : 's'}
+              </div>
+            </>
+          )}
+        </div>
         {editing ? (
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-            className="w-full bg-ink-900 border border-accent-500 rounded-lg px-3 py-2 outline-none"
-          />
+          <>
+            <button onClick={() => setEditing(false)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Cancel</button>
+            <button onClick={save} className="px-3 py-2 rounded-lg bg-accent-500 active:bg-accent-600 text-ink-50 text-sm font-semibold">Save</button>
+          </>
         ) : (
           <>
-            <div className="font-semibold truncate flex items-center gap-2">
-              {game.name}
-              {isNewest && <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-bold">newest</span>}
-            </div>
-            <div className="text-xs text-ink-400">{sessionCount} session{sessionCount === 1 ? '' : 's'}</div>
+            <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Edit</button>
+            <button
+              onClick={() => {
+                if (inUse) return alert('Cannot delete — game has past sessions. Rename it instead.')
+                if (confirm(`Delete "${game.name}"?`)) dispatch({ type: 'DELETE_GAME', id: game.id })
+              }}
+              disabled={inUse}
+              className="px-3 py-2 rounded-lg text-sm text-rose-300 active:bg-rose-900/30 disabled:opacity-30">×</button>
           </>
         )}
       </div>
-      {editing ? (
-        <>
-          <button onClick={() => setEditing(false)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Cancel</button>
-          <button onClick={save} className="px-3 py-2 rounded-lg bg-accent-500 active:bg-accent-600 text-ink-50 text-sm font-semibold">Save</button>
-        </>
-      ) : (
-        <>
-          <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Edit</button>
-          <button
-            onClick={() => {
-              if (inUse) return alert('Cannot delete — game has past sessions. Rename it instead.')
-              if (confirm(`Delete "${game.name}"?`)) dispatch({ type: 'DELETE_GAME', id: game.id })
-            }}
-            disabled={inUse}
-            className="px-3 py-2 rounded-lg text-sm text-rose-300 active:bg-rose-900/30 disabled:opacity-30">×</button>
-        </>
+
+      {open && (
+        <div className="border-t border-ink-700 bg-ink-900/40 p-3 space-y-3">
+          <NamedItemList
+            title="Puzzles"
+            hint="Auto-tag and link notes that mention these by name."
+            items={puzzles}
+            onAdd={(name) => dispatch({ type: 'ADD_PUZZLE', gameId: game.id, name })}
+            onRename={(id, name) => dispatch({ type: 'UPDATE_PUZZLE', gameId: game.id, id, patch: { name } })}
+            onDelete={(id) => dispatch({ type: 'DELETE_PUZZLE', gameId: game.id, id })}
+          />
+          <NamedItemList
+            title="Components"
+            hint="Physical props, locks, screens, audio cues, etc."
+            items={components}
+            onAdd={(name) => dispatch({ type: 'ADD_COMPONENT', gameId: game.id, name })}
+            onRename={(id, name) => dispatch({ type: 'UPDATE_COMPONENT', gameId: game.id, id, patch: { name } })}
+            onDelete={(id) => dispatch({ type: 'DELETE_COMPONENT', gameId: game.id, id })}
+          />
+        </div>
       )}
+    </div>
+  )
+}
+
+function NamedItemList({ title, hint, items, onAdd, onRename, onDelete }) {
+  const [draft, setDraft] = useState('')
+  const add = () => {
+    const v = draft.trim()
+    if (!v) return
+    if (items.some(i => i.name.toLowerCase() === v.toLowerCase())) return
+    onAdd(v)
+    setDraft('')
+  }
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-ink-400">{title}</div>
+      {hint && <div className="text-[11px] text-ink-500 mb-2">{hint}</div>}
+      <div className="space-y-1.5">
+        {items.map(item => (
+          <NamedItemRow key={item.id} item={item}
+            onRename={(name) => onRename(item.id, name)}
+            onDelete={() => { if (confirm(`Delete "${item.name}"?`)) onDelete(item.id) }} />
+        ))}
+        {items.length === 0 && <div className="text-[11px] text-ink-500 italic">None yet.</div>}
+      </div>
+      <div className="flex gap-2 mt-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+          placeholder={`Add ${title.toLowerCase().replace(/s$/, '')}…`}
+          className="flex-1 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 text-sm"
+        />
+        <button onClick={add} disabled={!draft.trim()}
+          className="px-3 rounded-lg bg-ink-700 active:bg-ink-600 disabled:opacity-30 text-sm">Add</button>
+      </div>
+    </div>
+  )
+}
+
+function NamedItemRow({ item, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(item.name)
+  const save = () => {
+    const v = name.trim()
+    if (!v) return
+    onRename(v)
+    setEditing(false)
+  }
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 bg-ink-800 border border-accent-500 rounded-lg px-2 py-1">
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+          className="flex-1 bg-transparent outline-none text-sm" />
+        <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2">Cancel</button>
+        <button onClick={save} className="text-xs px-2 py-1 rounded-md bg-accent-500 text-ink-50 font-semibold">Save</button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-lg pl-3 pr-1 py-1">
+      <span className="flex-1 text-sm">{item.name}</span>
+      <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2">Edit</button>
+      <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30">✕</button>
     </div>
   )
 }

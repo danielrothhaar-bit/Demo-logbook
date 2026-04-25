@@ -19,8 +19,10 @@ function fillIdsForSync(action) {
     case 'ADD_NOTE':        return { ...action, id: action.id || uid(), createdAt: action.createdAt || Date.now() }
     case 'ADD_DESIGNER':    return { ...action, id: action.id || ('d_' + uid()) }
     case 'ADD_GAME':        return { ...action, id: action.id || ('g_' + uid()), createdAt: action.createdAt || Date.now() }
+    case 'ADD_PUZZLE':      return { ...action, id: action.id || ('p_' + uid()) }
+    case 'ADD_COMPONENT':   return { ...action, id: action.id || ('c_' + uid()) }
     case 'CREATE_SESSION':  return { ...action, id: action.id || uid(), sessionCode: action.sessionCode || genCode() }
-    case 'TIMER_START':     return { ...action, startedAt: action.startedAt || Date.now() } // anchor on server clock by passing nothing? Keep client clock for now
+    case 'TIMER_START':     return { ...action, startedAt: action.startedAt || Date.now() }
     case 'ADD_ACTION_ITEM': return { ...action, item: { ...action.item, id: action.item?.id || uid(), createdAt: action.item?.createdAt || Date.now() } }
     default: return action
   }

@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useStore, fmtTime } from '../store.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
-import { autoTagsFromText } from '../utils/autoTag.js'
+import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
 import NoteCard from './NoteCard.jsx'
 
 export default function LiveLogging() {
-  const { state, dispatch, activeSession, activeDesigner, gameName } = useStore()
+  const { state, dispatch, activeSession, activeDesigner, gameName, gameById } = useStore()
   const [draft, setDraft] = useState('')
   const [pickedCategories, setPickedCategories] = useState([])
   const [discussionMode, setDiscussionMode] = useState(false)
@@ -45,14 +45,19 @@ export default function LiveLogging() {
   const commit = (text, opts = {}) => {
     if (!text?.trim()) return
     const trimmed = text.trim()
+    const game = gameById(activeSession.gameId)
     const auto = opts.skipAutoTag ? [] : autoTagsFromText(trimmed, state.categories)
     const merged = [...new Set([...(opts.categories ?? pickedCategories), ...auto])]
+    const puzzleIds    = opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.puzzles)
+    const componentIds = opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.components)
     dispatch({
       type: 'ADD_NOTE',
       sessionId: activeSession.id,
       designerId: activeDesigner.id,
       timestamp: currentSec,
       categories: merged,
+      puzzleIds,
+      componentIds,
       text: trimmed,
       photoUrl: opts.photoUrl ?? pendingPhoto,
       kind: opts.kind || 'note'
@@ -183,12 +188,8 @@ export default function LiveLogging() {
 
           {/* Category quick-tags */}
           <div>
-            <div className="flex items-center justify-between mb-1.5 px-1">
+            <div className="flex items-center mb-1.5 px-1">
               <div className="text-xs uppercase tracking-wider text-ink-400">Quick tags</div>
-              <button
-                onClick={() => dispatch({ type: 'SET_MODE', mode: 'admin' })}
-                className="text-xs text-accent-400 active:text-accent-500"
-              >Edit in Admin</button>
             </div>
             <div className="flex flex-wrap gap-2">
               {state.categories.filter(c => c !== 'Feedback Discussion').map(c => {
@@ -279,25 +280,40 @@ export default function LiveLogging() {
               </div>
             </div>
           </button>
+
+          {/* End Session — same prominent card style as Feedback Discussion */}
+          <button
+            onClick={() => {
+              if (confirm('End this session and move to review?')) {
+                dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
+                dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
+              }
+            }}
+            className="w-full rounded-2xl bg-rose-500/10 border border-rose-400/40 active:bg-rose-500/20 py-4 px-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-400/20 border border-rose-400/40 flex items-center justify-center text-rose-300">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-rose-100">End Session</div>
+                <div className="text-[12px] text-rose-200/70">Stop the timer and move to review.</div>
+              </div>
+            </div>
+          </button>
         </>
       )}
 
       {/* Notes feed */}
       {!discussionMode && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center px-1">
             <div className="text-xs uppercase tracking-wider text-ink-400">
               Feed · {activeSession.notes.length} notes
             </div>
-            <button
-              onClick={() => {
-                if (confirm('End this session and move to review?')) {
-                  dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
-                  dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
-                }
-              }}
-              className="text-xs text-rose-300 active:text-rose-400"
-            >End session</button>
           </div>
           {ordered.length === 0 ? (
             <div className="text-ink-400 text-sm text-center py-6">
