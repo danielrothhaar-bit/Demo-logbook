@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, fmtTime, DEMO_TARGET_SEC } from '../store.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
 import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
@@ -16,6 +16,7 @@ export default function LiveLogging() {
   const [pendingPhoto, setPendingPhoto] = useState(null)
   const [editNote, setEditNote] = useState(null)
   const [recordingAudio, setRecordingAudio] = useState(false)
+  const [showPuzzlePicker, setShowPuzzlePicker] = useState(false)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const audioStreamRef = useRef(null)
@@ -182,6 +183,36 @@ export default function LiveLogging() {
       categories: [c],
       text: `[${c}]`
     })
+  }
+
+  // Puzzles already marked solved this demo — used to filter the picker so
+  // a puzzle can only be logged "solved" once per session.
+  const game = gameById(activeSession.gameId)
+  const solvedPuzzleIds = useMemo(() => {
+    const ids = new Set()
+    for (const n of activeSession.notes) {
+      if ((n.categories || []).includes('Puzzle Solved')) {
+        for (const pid of (n.puzzleIds || [])) ids.add(pid)
+      }
+    }
+    return ids
+  }, [activeSession.notes])
+  const availablePuzzles = (game?.puzzles || []).filter(p => !solvedPuzzleIds.has(p.id))
+  const totalPuzzles = (game?.puzzles || []).length
+
+  const logPuzzleSolved = (puzzle) => {
+    dispatch({
+      type: 'ADD_NOTE',
+      sessionId: activeSession.id,
+      designerId: activeDesigner.id,
+      timestamp: currentSec,
+      categories: ['Puzzle Solved'],
+      puzzleIds: [puzzle.id],
+      componentIds: [],
+      text: `${puzzle.name} Puzzle solved`,
+      kind: 'note'
+    })
+    setShowPuzzlePicker(false)
   }
 
   // Render order: discussion mode replaces the normal logging UI
@@ -377,6 +408,23 @@ export default function LiveLogging() {
             )}
           </div>
 
+          {/* Puzzle Solved — opens picker so the designer can pick exactly which puzzle */}
+          {totalPuzzles > 0 && (
+            <button
+              onClick={() => setShowPuzzlePicker(true)}
+              disabled={availablePuzzles.length === 0}
+              className="w-full rounded-2xl bg-yellow-400 active:bg-yellow-500 disabled:bg-yellow-400/30 disabled:text-yellow-100/60 text-ink-950 py-4 px-4 font-bold text-base shadow-lg shadow-yellow-400/20 flex items-center justify-center gap-2"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Puzzle Solved
+              {availablePuzzles.length === 0 && (
+                <span className="text-[11px] font-medium opacity-80 ml-1">all {totalPuzzles} solved</span>
+              )}
+            </button>
+          )}
+
           {/* Feedback Discussion entry */}
           <button
             onClick={() => {
@@ -458,6 +506,89 @@ export default function LiveLogging() {
           onClose={() => setEditNote(null)}
         />
       )}
+
+      {showPuzzlePicker && (
+        <PuzzlePickerModal
+          puzzles={availablePuzzles}
+          totalPuzzles={totalPuzzles}
+          onPick={logPuzzleSolved}
+          onClose={() => setShowPuzzlePicker(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function PuzzlePickerModal({ puzzles, totalPuzzles, onPick, onClose }) {
+  const [pickedId, setPickedId] = useState(null)
+  const picked = puzzles.find(p => p.id === pickedId) || null
+  const solvedCount = totalPuzzles - puzzles.length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/70 px-3 pb-3 sm:p-4 animate-fadeUp">
+      <div className="w-full max-w-md rounded-3xl bg-ink-800 border border-yellow-400/40 overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-ink-700">
+          <div className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold">Mark a puzzle solved</div>
+          <div className="text-sm text-ink-300 mt-0.5">
+            {solvedCount > 0
+              ? `${solvedCount} of ${totalPuzzles} already solved this demo.`
+              : `Pick the puzzle the team just cracked.`}
+          </div>
+        </div>
+
+        <div className="max-h-[50vh] overflow-y-auto p-3 space-y-1.5">
+          {puzzles.length === 0 ? (
+            <div className="text-sm text-ink-400 text-center py-6">
+              All puzzles already marked solved this demo.
+            </div>
+          ) : puzzles.map(p => {
+            const active = p.id === pickedId
+            return (
+              <button
+                key={p.id}
+                onClick={() => setPickedId(p.id)}
+                className={`w-full text-left rounded-xl border p-3 flex items-center gap-3 ${
+                  active
+                    ? 'bg-yellow-400/15 border-yellow-400'
+                    : 'bg-ink-900 border-ink-700 active:bg-ink-700'
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  active ? 'border-yellow-400 bg-yellow-400' : 'border-ink-500'
+                }`}>
+                  {active && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b0f17" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {p.code && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">
+                        {p.code}
+                      </span>
+                    )}
+                    <span className="font-semibold truncate">{p.name}</span>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-2 p-3 border-t border-ink-700">
+          <button onClick={onClose}
+            className="flex-1 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
+          <button
+            onClick={() => picked && onPick(picked)}
+            disabled={!picked}
+            className="flex-[2] py-3 rounded-xl bg-yellow-400 active:bg-yellow-500 disabled:opacity-40 text-ink-950 font-bold"
+          >
+            Confirm Solve
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

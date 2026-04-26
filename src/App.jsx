@@ -12,6 +12,8 @@ import BottomNav from './components/BottomNav.jsx'
 export default function App() {
   const { state } = useStore()
 
+  if (!state.hydrated) return <LoadingScreen />
+
   return (
     <div className="min-h-full flex flex-col bg-ink-950">
       <Header />
@@ -25,6 +27,29 @@ export default function App() {
       </main>
       <BottomNav />
     </div>
+  )
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-ink-950 text-ink-300">
+      <div className="animate-spin text-accent-400">
+        <LockIcon size={56} />
+      </div>
+      <div className="mt-5 text-[11px] uppercase tracking-[0.18em] text-ink-400 font-semibold">
+        Loading…
+      </div>
+    </div>
+  )
+}
+
+function LockIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
   )
 }
 

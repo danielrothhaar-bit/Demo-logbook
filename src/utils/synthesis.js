@@ -611,3 +611,104 @@ export function aggregateAcrossSessions(sessions, gameId) {
     componentStats
   }
 }
+
+/**
+ * Cross-session puzzle solve-time stats for one game.
+ *
+ * Per-puzzle aggregates `timeOnPuzzle` (solvedTs − firstTouchTs) across every
+ * session where that puzzle was solved. Returns:
+ *   {
+ *     perPuzzle: [{ id, name, code, solveCount, avgSolveTime, fastestSolve, slowestSolve, demosSolved }],
+ *     overallAvg:    avg solve time across all puzzle solves
+ *     overallCount:  total number of solve events
+ *     avgGapBetween: avg seconds between consecutive solves within a session
+ *     longestAvg:    perPuzzle entry with the highest avgSolveTime (≥2 solves preferred, else any)
+ *     shortestAvg:   perPuzzle entry with the lowest avgSolveTime
+ *   }
+ *
+ * Notes that lack a `firstTouchTs` (puzzles solved without ever being mentioned
+ * earlier) contribute solve count + 0-duration to averages — those would be
+ * misleading, so we exclude time-of-zero from the time aggregates.
+ */
+export function aggregatePuzzleSolveTimes(sessions, game) {
+  if (!game) return emptySolveTimes()
+  const relevant = sessions.filter(s => s.gameId === game.id)
+  if (!relevant.length || !(game.puzzles || []).length) return emptySolveTimes()
+
+  // Per-puzzle solve-time samples.
+  const samples = {}
+  for (const p of game.puzzles) {
+    samples[p.id] = { id: p.id, name: p.name, code: p.code || '', times: [], demosSolved: new Set() }
+  }
+
+  let allSolveDurations = []
+  let allGaps = []
+
+  for (const sess of relevant) {
+    const stats = analyzePuzzles(sess.notes, game)
+    const solvesInSession = stats
+      .filter(p => p.solvedTs != null)
+      .sort((a, b) => a.solvedTs - b.solvedTs)
+
+    for (const p of solvesInSession) {
+      if (samples[p.id]) {
+        samples[p.id].demosSolved.add(sess.id)
+        if (p.timeOnPuzzle != null && p.timeOnPuzzle > 0) {
+          samples[p.id].times.push(p.timeOnPuzzle)
+          allSolveDurations.push(p.timeOnPuzzle)
+        }
+      }
+    }
+    for (let i = 1; i < solvesInSession.length; i++) {
+      const gap = solvesInSession[i].solvedTs - solvesInSession[i - 1].solvedTs
+      if (gap >= 0) allGaps.push(gap)
+    }
+  }
+
+  const perPuzzle = Object.values(samples).map(s => {
+    const count = s.times.length
+    const avg = count ? Math.round(s.times.reduce((a, b) => a + b, 0) / count) : null
+    return {
+      id: s.id,
+      name: s.name,
+      code: s.code,
+      solveCount: count,
+      avgSolveTime: avg,
+      fastestSolve: count ? Math.min(...s.times) : null,
+      slowestSolve: count ? Math.max(...s.times) : null,
+      demosSolved: s.demosSolved.size
+    }
+  })
+
+  const withTimes = perPuzzle.filter(p => p.avgSolveTime != null)
+  const longestAvg  = withTimes.length ? withTimes.reduce((a, b) => a.avgSolveTime >= b.avgSolveTime ? a : b) : null
+  const shortestAvg = withTimes.length ? withTimes.reduce((a, b) => a.avgSolveTime <= b.avgSolveTime ? a : b) : null
+  const overallAvg = allSolveDurations.length
+    ? Math.round(allSolveDurations.reduce((a, b) => a + b, 0) / allSolveDurations.length)
+    : null
+  const avgGapBetween = allGaps.length
+    ? Math.round(allGaps.reduce((a, b) => a + b, 0) / allGaps.length)
+    : null
+
+  return {
+    perPuzzle,
+    overallAvg,
+    overallCount: allSolveDurations.length,
+    totalSolveEvents: perPuzzle.reduce((sum, p) => sum + p.solveCount, 0),
+    avgGapBetween,
+    longestAvg,
+    shortestAvg
+  }
+}
+
+function emptySolveTimes() {
+  return {
+    perPuzzle: [],
+    overallAvg: null,
+    overallCount: 0,
+    totalSolveEvents: 0,
+    avgGapBetween: null,
+    longestAvg: null,
+    shortestAvg: null
+  }
+}

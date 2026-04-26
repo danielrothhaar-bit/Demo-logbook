@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import {
   reducer,
-  initialState,
   CATEGORY_COLORS,
   PERSISTED_KEYS,
   CLIENT_ONLY_ACTIONS,
@@ -9,6 +8,24 @@ import {
   genCode,
   initialsFromName
 } from './lib/reducer.js'
+
+// Start the client with empty data so the seeded sample games never flash
+// before the real state arrives from the server. The reducer's @@HYDRATE
+// will fill these from the GET /api/state response on bootstrap.
+function clientInitialState() {
+  return {
+    designers: [],
+    categories: [],
+    games: [],
+    sessions: [],
+    actionItems: [],
+    activeDesignerId: null,
+    activeSessionId: null,
+    reviewSessionId: null,
+    mode: 'home',
+    hydrated: false
+  }
+}
 
 const StoreContext = createContext(null)
 
@@ -42,12 +59,33 @@ function writeStoredActiveDesigner(id) {
 }
 
 export function StoreProvider({ children }) {
-  const [state, baseDispatch] = useReducer(reducer, undefined, initialState)
+  const [state, baseDispatch] = useReducer(reducer, undefined, clientInitialState)
   const versionRef = useRef(0)
+  // In-flight optimistic POSTs. While > 0, an SSE-triggered GET /api/state
+  // could return state that doesn't yet include our action (because the POST
+  // hasn't been applied server-side) — so we defer the catch-up until our
+  // POSTs land, otherwise the GET response rolls our optimistic state back.
+  const pendingPostsRef = useRef(0)
+  const sseMissedRef = useRef(false)
   // Mirror state in a ref so the stable dispatch callback can read it without
   // re-binding (used to pre-compute Date.now()-derived fields).
   const stateRef = useRef(state)
   useEffect(() => { stateRef.current = state }, [state])
+
+  // Apply server state, but only if it's at least as fresh as what we already
+  // have. Prevents a slow response from regressing us past a newer hydrate.
+  const hydrateIfNewer = (serverState, serverVersion) => {
+    if (serverVersion < versionRef.current) return
+    versionRef.current = serverVersion
+    baseDispatch({ type: '@@HYDRATE', state: serverState })
+  }
+
+  const refreshFromServer = () => {
+    fetch('/api/state', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(({ state, version }) => hydrateIfNewer(state, version))
+      .catch(() => {})
+  }
 
   // Mirror activeDesignerId → localStorage. Covers cases the dispatch wrapper
   // can't see directly (e.g. @@HYDRATE clearing a deleted designer).
@@ -58,7 +96,7 @@ export function StoreProvider({ children }) {
   // ---- Bootstrap from server ----
   useEffect(() => {
     let alive = true
-    fetch('/api/state')
+    fetch('/api/state', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => {
         if (!alive) return
@@ -85,12 +123,15 @@ export function StoreProvider({ children }) {
     es.onmessage = (e) => {
       try {
         const { version } = JSON.parse(e.data)
-        if (version > versionRef.current) {
-          fetch('/api/state').then(r => r.json()).then(({ state, version }) => {
-            versionRef.current = version
-            baseDispatch({ type: '@@HYDRATE', state })
-          })
+        if (version <= versionRef.current) return
+        // Defer SSE catch-ups while our POST is in flight; the POST .then will
+        // pick up the latest state, and we re-run a refresh after if anything
+        // else changed in the meantime.
+        if (pendingPostsRef.current > 0) {
+          sseMissedRef.current = true
+          return
         }
+        refreshFromServer()
       } catch {}
     }
     es.onerror = () => { /* browser auto-reconnects */ }
@@ -121,20 +162,28 @@ export function StoreProvider({ children }) {
     baseDispatch(filled)
     if (CLIENT_ONLY_ACTIONS.has(filled.type)) return
 
+    pendingPostsRef.current++
     fetch('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: filled })
+      body: JSON.stringify({ action: filled }),
+      cache: 'no-store'
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => {
-        versionRef.current = version
         // If the server's authoritative state diverges from optimism, reconcile.
         // (e.g. delete blocked because of dependencies → server keeps it)
-        baseDispatch({ type: '@@HYDRATE', state })
+        hydrateIfNewer(state, version)
       })
       .catch((err) => {
         console.warn('Sync failed for', filled.type, err)
+      })
+      .finally(() => {
+        pendingPostsRef.current--
+        if (pendingPostsRef.current === 0 && sseMissedRef.current) {
+          sseMissedRef.current = false
+          refreshFromServer()
+        }
       })
   }, [])
 

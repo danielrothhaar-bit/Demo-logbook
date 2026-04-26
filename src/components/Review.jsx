@@ -436,6 +436,7 @@ function ReviewBody({ session: reviewSession }) {
           puzzleStats={puzzleStats}
           stuckZones={stuckZones}
           density={density}
+          totalSec={totalSec}
         />
       )}
 
@@ -741,11 +742,13 @@ function MergedCard({ group }) {
   )
 }
 
-function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones, density }) {
+function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones, density, totalSec }) {
   const { designerById, categoryColor } = useStore()
   const POSITIVE_SET = new Set(['Wow Moment', 'Puzzle Solved'])
   return (
     <div className="space-y-4">
+      <PuzzleSolveTimelineSection puzzles={puzzleStats} totalSec={totalSec} />
+
       <PuzzleProgressSection puzzles={puzzleStats} />
 
       <FrustrationTimelineSection density={density} />
@@ -838,6 +841,84 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
         ))}
       </Section>
     </div>
+  )
+}
+
+function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
+  const solved = (puzzles || [])
+    .filter(p => p.solvedTs != null)
+    .sort((a, b) => a.solvedTs - b.solvedTs)
+
+  if (!solved.length) {
+    return (
+      <Section title="Puzzle solve timeline" hint="When each puzzle was marked solved this demo.">
+        <Empty text="No puzzles marked solved yet." />
+      </Section>
+    )
+  }
+
+  // Span the bar across the demo duration, but always at least far enough to
+  // include the last solve so a marker is never clipped past the right edge.
+  const span = Math.max(totalSec || 0, ...solved.map(p => p.solvedTs), 60)
+
+  return (
+    <Section title="Puzzle solve timeline" hint={`${solved.length} of ${puzzles.length} puzzles solved.`}>
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-3">
+        <div className="relative h-10">
+          <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
+          {solved.map((p, i) => {
+            const pct = span > 0 ? Math.min(100, Math.max(0, (p.solvedTs / span) * 100)) : 0
+            return (
+              <div
+                key={p.id}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+                style={{ left: `${pct}%` }}
+                title={`${p.name} solved at ${fmtCountdown(p.solvedTs)}`}
+              >
+                <span className="w-4 h-4 rounded-full bg-yellow-400 border-2 border-ink-800 flex items-center justify-center text-[8px] font-bold text-ink-950 leading-none">
+                  {i + 1}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-[10px] text-ink-500 font-mono tabular-nums">
+          <span>{fmtCountdown(0)}</span>
+          <span>{fmtCountdown(span)}</span>
+        </div>
+
+        <div className="space-y-1.5 pt-1">
+          {solved.map((p, i) => {
+            const prev = i > 0 ? solved[i - 1] : null
+            const gap = prev ? p.solvedTs - prev.solvedTs : null
+            return (
+              <div key={p.id} className="flex items-start gap-2 text-xs bg-ink-900 border border-ink-700 rounded-lg p-2">
+                <span className="w-5 h-5 rounded-full bg-yellow-400 text-ink-950 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {p.code && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
+                    )}
+                    <span className="font-semibold text-ink-100 truncate">{p.name}</span>
+                  </div>
+                  <div className="text-[11px] text-ink-400 mt-0.5 font-mono tabular-nums">
+                    solved {fmtCountdown(p.solvedTs)}
+                    {p.timeOnPuzzle != null && p.timeOnPuzzle > 0 && (
+                      <span> · took {fmtTime(p.timeOnPuzzle)}</span>
+                    )}
+                    {gap != null && (
+                      <span> · {fmtTime(gap)} after #{i}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Section>
   )
 }
 

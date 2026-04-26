@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
-import { aggregateAcrossSessions } from '../utils/synthesis.js'
+import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
 const PAGES = [
@@ -52,6 +52,7 @@ export default function Trends() {
 function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }) {
   const game = gameById(gameId) || games[0]
   const agg = useMemo(() => aggregateAcrossSessions(state.sessions, game.id), [state.sessions, game.id])
+  const solveTimes = useMemo(() => aggregatePuzzleSolveTimes(state.sessions, game), [state.sessions, game])
 
   return (
     <>
@@ -76,6 +77,8 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
         </div>
       ) : (
         <>
+          <PuzzleSolveTimes solveTimes={solveTimes} />
+
           <Leaderboard
             title="Top problem puzzles"
             hint="Sorted by negative notes (frustration, logic, tech, flow)."
@@ -384,6 +387,124 @@ function SplitBar({ negative, positive, neutral }) {
       {negative > 0 && <div className="h-full bg-rose-400" style={{ width: pct(negative) }} />}
       {neutral > 0 && <div className="h-full bg-ink-600" style={{ width: pct(neutral) }} />}
       {positive > 0 && <div className="h-full bg-emerald-400" style={{ width: pct(positive) }} />}
+    </div>
+  )
+}
+
+function PuzzleSolveTimes({ solveTimes }) {
+  const { perPuzzle, overallAvg, totalSolveEvents, avgGapBetween, longestAvg, shortestAvg } = solveTimes
+
+  if (totalSolveEvents === 0) {
+    return (
+      <div>
+        <div className="px-1 mb-2">
+          <div className="text-xs uppercase tracking-wider text-ink-400">Puzzle solve times</div>
+          <div className="text-[11px] text-ink-500 mt-0.5">
+            How long puzzles take to solve, averaged across every demo of this game.
+          </div>
+        </div>
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 text-center text-sm text-ink-500">
+          No puzzles solved yet. Use the yellow Puzzle Solved button during a demo to start tracking.
+        </div>
+      </div>
+    )
+  }
+
+  const ranked = [...perPuzzle]
+    .filter(p => p.avgSolveTime != null)
+    .sort((a, b) => b.avgSolveTime - a.avgSolveTime)
+
+  const maxAvg = ranked[0]?.avgSolveTime || 1
+
+  return (
+    <div>
+      <div className="px-1 mb-2">
+        <div className="text-xs uppercase tracking-wider text-ink-400">Puzzle solve times</div>
+        <div className="text-[11px] text-ink-500 mt-0.5">
+          Time from a puzzle's first mention to when it's marked solved, averaged across all demos.
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <SolveStat label="Avg solve time" value={overallAvg != null ? fmtTime(overallAvg) : '—'} mono />
+          <SolveStat label="Avg gap between solves" value={avgGapBetween != null ? fmtTime(avgGapBetween) : '—'} mono />
+          <SolveStat label="Total solves logged" value={String(totalSolveEvents)} />
+          <SolveStat label="Puzzles with timing" value={`${ranked.length} of ${perPuzzle.length}`} />
+        </div>
+
+        {(longestAvg || shortestAvg) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            {longestAvg && (
+              <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-rose-300 font-semibold">Longest on average</div>
+                <div className="font-semibold text-rose-100 mt-0.5 truncate">{longestAvg.name}</div>
+                <div className="text-[11px] text-rose-200/80 mt-0.5 font-mono tabular-nums">
+                  avg {fmtTime(longestAvg.avgSolveTime)} · {longestAvg.solveCount} solve{longestAvg.solveCount === 1 ? '' : 's'}
+                </div>
+              </div>
+            )}
+            {shortestAvg && shortestAvg.id !== longestAvg?.id && (
+              <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">Shortest on average</div>
+                <div className="font-semibold text-emerald-100 mt-0.5 truncate">{shortestAvg.name}</div>
+                <div className="text-[11px] text-emerald-200/80 mt-0.5 font-mono tabular-nums">
+                  avg {fmtTime(shortestAvg.avgSolveTime)} · {shortestAvg.solveCount} solve{shortestAvg.solveCount === 1 ? '' : 's'}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-1.5 pt-1">
+          {ranked.map(p => {
+            const widthPct = Math.max(8, (p.avgSolveTime / maxAvg) * 100)
+            return (
+              <div key={p.id} className="rounded-lg bg-ink-900 border border-ink-700 p-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {p.code && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
+                  )}
+                  <span className="font-semibold text-sm text-ink-100 truncate flex-1">{p.name}</span>
+                  <span className="font-mono tabular-nums text-sm text-yellow-300">{fmtTime(p.avgSolveTime)}</span>
+                </div>
+                <div className="w-full h-1.5 mt-1.5 bg-ink-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-yellow-400/70 rounded-full" style={{ width: `${widthPct}%` }} />
+                </div>
+                <div className="text-[11px] text-ink-400 mt-1 font-mono tabular-nums">
+                  {p.solveCount} solve{p.solveCount === 1 ? '' : 's'}
+                  {p.fastestSolve != null && p.solveCount > 1 && (
+                    <span> · fastest {fmtTime(p.fastestSolve)} · slowest {fmtTime(p.slowestSolve)}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {perPuzzle.filter(p => p.avgSolveTime == null && p.solveCount > 0).map(p => (
+            <div key={p.id} className="rounded-lg bg-ink-900 border border-ink-700 p-2.5 opacity-60">
+              <div className="flex items-center gap-2 flex-wrap">
+                {p.code && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
+                )}
+                <span className="font-semibold text-sm text-ink-200 truncate flex-1">{p.name}</span>
+                <span className="text-[11px] text-ink-400">no timing</span>
+              </div>
+              <div className="text-[11px] text-ink-500 mt-1">
+                Solved {p.solveCount}× but no first-mention before solve, so no duration.
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SolveStat({ label, value, mono }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-ink-400">{label}</div>
+      <div className={`font-bold text-lg ${mono ? 'font-mono tabular-nums' : ''} text-ink-100`}>{value}</div>
     </div>
   )
 }
