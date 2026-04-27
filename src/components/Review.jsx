@@ -881,9 +881,21 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
   const showTimerEndLine = span >= DEMO_TARGET_SEC
   const BENCHMARK_TOLERANCE_SEC = 180 // ±3 min from goal still counts as "on time"
 
+  // Pull chips toward the inner edge when they're near a boundary so labels
+  // can't spill past the card. Below ~12% / above ~88%, anchor to the edge
+  // instead of centering on the line.
+  const chipAlign = (pct) =>
+    pct < 12 ? 'left-0' :
+    pct > 88 ? 'right-0' :
+    'left-1/2 -translate-x-1/2'
+
   return (
     <Section title="Puzzle solve timeline" hint={`${solved.length} of ${puzzles.length} puzzles solved.`}>
       <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-2">
+        {/* Mobile: scroll horizontally so dots/benchmarks have breathing room.
+            Desktop (>=sm): no min-width, fills the card. */}
+        <div className="overflow-x-auto sm:overflow-visible no-scrollbar">
+        <div className="min-w-[640px] sm:min-w-0">
         <div className="relative h-20 mt-6">
           {/* 10-minute grid ticks — drawn first so everything else stacks on top. */}
           {ticks.map(t => {
@@ -899,17 +911,20 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
           })}
 
           {/* Timer-end line — solid, with a small label so it can't be missed. */}
-          {showTimerEndLine && (
-            <div
-              className="absolute top-0 bottom-0 -translate-x-1/2"
-              style={{ left: `${(DEMO_TARGET_SEC / span) * 100}%` }}
-            >
-              <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-rose-500/80" />
-              <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-400/60 text-[9px] font-bold text-rose-200 whitespace-nowrap">
-                ⏰ Timer end
+          {showTimerEndLine && (() => {
+            const timerPct = (DEMO_TARGET_SEC / span) * 100
+            return (
+              <div
+                className="absolute top-0 bottom-0 -translate-x-1/2"
+                style={{ left: `${timerPct}%` }}
+              >
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-rose-500/80" />
+                <div className={`absolute -top-5 ${chipAlign(timerPct)} px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-400/60 text-[9px] font-bold text-rose-200 whitespace-nowrap`}>
+                  ⏰ Timer end
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Center axis bar */}
           <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
@@ -926,7 +941,7 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
               >
                 <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 border-l border-dashed border-yellow-300/70" />
                 <div
-                  className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full px-1.5 py-0.5 rounded bg-yellow-500/15 border border-yellow-500/40 text-[10px] font-semibold text-yellow-200 whitespace-nowrap shadow-sm"
+                  className={`absolute top-0 ${chipAlign(pct)} -translate-y-full px-1.5 py-0.5 rounded bg-yellow-500/15 border border-yellow-500/40 text-[10px] font-semibold text-yellow-200 whitespace-nowrap shadow-sm`}
                   title={`Benchmark · ${p.name} · ${fmtCountdown(p.benchSec)}`}
                 >
                   ⏱ {label}
@@ -963,7 +978,7 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
                 <span className={`block w-7 h-7 rounded-full ${dotClass} border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg`}>
                   {i + 1}
                 </span>
-                <div className="absolute left-1/2 -translate-x-1/2 -top-9 px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl">
+                <div className={`absolute -top-9 ${chipAlign(pct)} px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl`}>
                   {p.name}
                   <span className="text-ink-400 font-mono ml-1">· {fmtCountdown(p.solvedTs)}</span>
                   {deltaLabel && (
@@ -996,6 +1011,8 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
             )
           })}
         </div>
+        </div>{/* /min-w */}
+        </div>{/* /overflow-x-auto */}
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-400 pt-1">
