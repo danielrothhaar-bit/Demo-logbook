@@ -66,7 +66,17 @@ export function StoreProvider({ children }) {
   // hasn't been applied server-side) — so we defer the catch-up until our
   // POSTs land, otherwise the GET response rolls our optimistic state back.
   const pendingPostsRef = useRef(0)
-  const sseMissedRef = useRef(false)
+  // Highest version seen via SSE during the current POST flight. After all
+  // POSTs land, refresh only if SSE pointed past what our hydrates set.
+  const highestSeenVersionRef = useRef(0)
+  // Track if any POST in the current flight failed — if so, the optimistic
+  // state may diverge from the server's, so a final refresh reconciles.
+  const anyFailedRef = useRef(false)
+  // Monotonic dispatch counter. A POST's response only hydrates if no newer
+  // dispatch followed it — otherwise its (intermediate) server snapshot would
+  // briefly roll the UI back through stale states (the bug behind rapid clicks
+  // on puzzle/component reorder, where the moves "replayed").
+  const dispatchSeqRef = useRef(0)
   // Mirror state in a ref so the stable dispatch callback can read it without
   // re-binding (used to pre-compute Date.now()-derived fields).
   const stateRef = useRef(state)
@@ -124,13 +134,12 @@ export function StoreProvider({ children }) {
       try {
         const { version } = JSON.parse(e.data)
         if (version <= versionRef.current) return
-        // Defer SSE catch-ups while our POST is in flight; the POST .then will
-        // pick up the latest state, and we re-run a refresh after if anything
-        // else changed in the meantime.
-        if (pendingPostsRef.current > 0) {
-          sseMissedRef.current = true
-          return
+        if (version > highestSeenVersionRef.current) {
+          highestSeenVersionRef.current = version
         }
+        // Defer SSE catch-ups while our POST is in flight; the POST .then will
+        // pick up the latest state (or .finally will refresh if needed).
+        if (pendingPostsRef.current > 0) return
         refreshFromServer()
       } catch {}
     }
@@ -162,6 +171,7 @@ export function StoreProvider({ children }) {
     baseDispatch(filled)
     if (CLIENT_ONLY_ACTIONS.has(filled.type)) return
 
+    const mySeq = ++dispatchSeqRef.current
     pendingPostsRef.current++
     fetch('/api/actions', {
       method: 'POST',
@@ -171,18 +181,32 @@ export function StoreProvider({ children }) {
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => {
+        // Skip the hydrate if a newer dispatch followed us — its response will
+        // be the source of truth, and applying our (now intermediate) snapshot
+        // would briefly roll the UI back. Without this, rapid clicks on the
+        // reorder buttons make the items "replay" through every intermediate
+        // state as each in-order POST resolves.
+        if (mySeq < dispatchSeqRef.current) return
         // If the server's authoritative state diverges from optimism, reconcile.
         // (e.g. delete blocked because of dependencies → server keeps it)
         hydrateIfNewer(state, version)
       })
       .catch((err) => {
         console.warn('Sync failed for', filled.type, err)
+        anyFailedRef.current = true
       })
       .finally(() => {
         pendingPostsRef.current--
-        if (pendingPostsRef.current === 0 && sseMissedRef.current) {
-          sseMissedRef.current = false
-          refreshFromServer()
+        if (pendingPostsRef.current === 0) {
+          // After all POSTs settle: refresh if SSE saw a version past what our
+          // hydrates set (out-of-order responses, or another client's actions),
+          // or if any POST failed (optimistic state may diverge from server).
+          const needRefresh =
+            highestSeenVersionRef.current > versionRef.current ||
+            anyFailedRef.current
+          highestSeenVersionRef.current = 0
+          anyFailedRef.current = false
+          if (needRefresh) refreshFromServer()
         }
       })
   }, [])
