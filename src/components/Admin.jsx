@@ -351,6 +351,11 @@ function NamedItemRow({ item, kind, allItems = [], index = 0, canUp, canDown, on
   const [code, setCode] = useState(item.code || '')
   const [benchmark, setBenchmark] = useState(item.benchmark || '')
   const [benchmarkName, setBenchmarkName] = useState(item.benchmarkName || '')
+  // Goal time = expected solve duration in minutes. Used by Trends to flag
+  // puzzles whose averaged solve time drifts more than ±1 min from this goal.
+  const [goalMinutesRaw, setGoalMinutesRaw] = useState(
+    item.goalMinutes != null ? String(item.goalMinutes) : ''
+  )
   // Available-after prerequisites: ids of other puzzles this one becomes
   // solvable after. Used by the analyzer to anchor solve-time start.
   const [dependsOn, setDependsOn] = useState(
@@ -368,6 +373,8 @@ function NamedItemRow({ item, kind, allItems = [], index = 0, canUp, canDown, on
     if (isPuzzle) {
       patch.benchmark = benchmark.trim()
       patch.benchmarkName = benchmarkName.trim()
+      const goalNum = parseFloat(goalMinutesRaw)
+      patch.goalMinutes = isNaN(goalNum) || goalNum <= 0 ? null : goalNum
       // Drop any ids that no longer exist in the current list (defensive).
       // Allow the special "game_start" sentinel through unfiltered.
       const validIds = new Set(allItems.map(p => p.id))
@@ -420,6 +427,18 @@ function NamedItemRow({ item, kind, allItems = [], index = 0, canUp, canDown, on
                   placeholder="e.g. Halfway, Locker, Final"
                   className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500"
                 />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold w-20 flex-shrink-0">Goal time</span>
+                <input
+                  inputMode="decimal"
+                  value={goalMinutesRaw}
+                  onChange={(e) => setGoalMinutesRaw(e.target.value.replace(/[^0-9.]/g, ''))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                  placeholder="minutes (optional)"
+                  className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm tabular-nums focus:border-accent-500"
+                />
+                <span className="text-[10px] text-ink-300 flex-shrink-0">min</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold w-20 flex-shrink-0 pt-2">Available after</span>
@@ -505,6 +524,12 @@ function NamedItemRow({ item, kind, allItems = [], index = 0, canUp, canDown, on
           </span>
         )
       })()}
+      {isPuzzle && item.goalMinutes != null && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex-shrink-0 tabular-nums"
+              title={`Goal solve time: ${item.goalMinutes} minute${item.goalMinutes === 1 ? '' : 's'}`}>
+          🎯 {item.goalMinutes}m
+        </span>
+      )}
       {isPuzzle && item.benchmark && (() => {
         const valid = parseBenchmark(item.benchmark) != null
         return (

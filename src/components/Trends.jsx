@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -66,7 +66,7 @@ function CollapsibleSection({ title, hint, children, defaultOpen = true }) {
       <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
         <div className="flex-1 min-w-0">
           <div className="text-base font-bold text-ink-50 leading-snug">{title}</div>
-          {hint && <div className="text-xs text-ink-400 mt-0.5 font-normal">{hint}</div>}
+          {hint && <div className="text-xs text-ink-200 mt-0.5 font-normal">{hint}</div>}
         </div>
         <svg className="w-4 h-4 text-ink-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="6 9 12 15 18 9" />
@@ -372,7 +372,7 @@ function DemoStats({ game, agg }) {
         <Stat label="Avg clues / demo" value={avgClues} accent="yellow" />
       </div>
       {compareText && (
-        <div className="text-xs text-ink-400">{compareText}</div>
+        <div className="text-xs text-ink-200">{compareText}</div>
       )}
     </CollapsibleSection>
   )
@@ -387,7 +387,7 @@ const STAT_ACCENT = {
 function Stat({ label, value, accent = 'default' }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-ink-400 font-medium">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-ink-200 font-medium">{label}</div>
       <div className={`text-2xl font-bold tabular-nums leading-tight ${STAT_ACCENT[accent] || STAT_ACCENT.default}`}>
         {value}
       </div>
@@ -733,33 +733,9 @@ function PuzzleSolveTimes({ solveTimes, game }) {
       </div>
 
       <div className="space-y-1.5 pt-1">
-        {ordered.map(p => {
-          const hasAvg = p.avgSolveTime != null
-          const widthPct = hasAvg ? Math.max(8, (p.avgSolveTime / maxAvg) * 100) : 0
-          return (
-            <div key={p.id} className={`rounded-lg bg-ink-900 border border-ink-700 p-2.5 ${hasAvg ? '' : 'opacity-60'}`}>
-              <div className="flex items-center gap-2 flex-wrap">
-                {p.code && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700 tabular-nums">{p.code}</span>
-                )}
-                <span className="font-semibold text-sm text-ink-100 truncate flex-1">{p.name}</span>
-                <span className="text-[10px] text-ink-500 tabular-nums">
-                  {p.solveCount > 0 ? `${p.solveCount} solve${p.solveCount === 1 ? '' : 's'}` : 'no solves'}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
-                <SolveCell label="Avg" value={p.avgSolveTime} accent="yellow" />
-                <SolveCell label="Fastest" value={p.fastestSolve} accent="emerald" />
-                <SolveCell label="Slowest" value={p.slowestSolve} accent="rose" />
-              </div>
-              {hasAvg && (
-                <div className="w-full h-1 mt-2 bg-ink-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-yellow-400/70 rounded-full" style={{ width: `${widthPct}%` }} />
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {ordered.map(p => (
+          <PuzzleSolveRow key={p.id} puzzle={p} maxAvg={maxAvg} />
+        ))}
       </div>
 
       <BenchmarksSubsection perPuzzle={ordered} />
@@ -767,17 +743,97 @@ function PuzzleSolveTimes({ solveTimes, game }) {
   )
 }
 
-const SOLVE_CELL_ACCENT = {
-  yellow:  'text-yellow-300',
-  emerald: 'text-emerald-300',
-  rose:    'text-rose-300'
+function PuzzleSolveRow({ puzzle: p, maxAvg }) {
+  const { dispatch } = useStore()
+  const hasAvg = p.avgSolveTime != null
+  const widthPct = hasAvg ? Math.max(8, (p.avgSolveTime / maxAvg) * 100) : 0
+  const goalSec = p.goalMinutes != null ? p.goalMinutes * 60 : null
+  const avgOffGoal = goalSec != null && hasAvg && Math.abs(p.avgSolveTime - goalSec) > 60
+  // Avg goes red when the average deviates more than ±60 sec from the puzzle's
+  // configured Goal Time; otherwise it stays white like fastest/slowest.
+  const avgClass = avgOffGoal ? 'text-rose-400' : 'text-ink-50'
+  const allSolves = p.solves || []
+
+  const openDemo = (sessionId) => {
+    dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
+  }
+
+  return (
+    <details className={`group rounded-lg bg-ink-900 border border-ink-700 ${hasAvg ? '' : 'opacity-60'}`}>
+      <summary className="p-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center gap-2 flex-wrap">
+          {p.code && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-800 text-ink-300 border border-ink-700 tabular-nums">{p.code}</span>
+          )}
+          <span className="font-semibold text-sm text-ink-50 truncate flex-1">{p.name}</span>
+          {goalSec != null && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 font-medium tabular-nums"
+                  title={`Goal solve time: ${p.goalMinutes} min`}>
+              🎯 {p.goalMinutes}m
+            </span>
+          )}
+          <span className="text-[11px] text-ink-300 tabular-nums">
+            {allSolves.length > 0 ? `${allSolves.length} solve${allSolves.length === 1 ? '' : 's'}` : 'no solves'}
+          </span>
+          <svg
+            className="w-3.5 h-3.5 text-ink-300 transition-transform group-open:rotate-180 flex-shrink-0"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
+          <SolveCell label="Avg" value={p.avgSolveTime} colorClass={avgClass} />
+          <SolveCell label="Fastest" value={p.fastestSolve} colorClass="text-ink-50" />
+          <SolveCell label="Slowest" value={p.slowestSolve} colorClass="text-ink-50" />
+        </div>
+        {hasAvg && (
+          <div className="w-full h-1 mt-2 bg-ink-800 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full ${avgOffGoal ? 'bg-rose-400/70' : 'bg-yellow-400/70'}`} style={{ width: `${widthPct}%` }} />
+          </div>
+        )}
+      </summary>
+
+      {allSolves.length > 0 && (
+        <div className="border-t border-ink-700 px-2.5 py-2 space-y-1">
+          {allSolves.map((s, i) => (
+            <button
+              key={`${s.sessionId}-${i}`}
+              onClick={() => openDemo(s.sessionId)}
+              className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-ink-800 active:bg-ink-700 text-xs"
+            >
+              <span className="text-ink-200 font-medium tabular-nums flex-shrink-0">
+                {s.sessionDate}
+              </span>
+              {s.sessionTime && (
+                <span className="text-ink-300 tabular-nums flex-shrink-0">{fmtClockTime(s.sessionTime)}</span>
+              )}
+              <span className="text-ink-400 flex-1 text-right tabular-nums">
+                {s.timeOnPuzzle != null && s.timeOnPuzzle > 0
+                  ? `took ${fmtTime(s.timeOnPuzzle)}`
+                  : `solved ${fmtCountdown(s.solvedTs)}`}
+              </span>
+              {s.isSue && (
+                <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/40 flex-shrink-0">
+                  SUE
+                </span>
+              )}
+              <svg className="w-3 h-3 text-ink-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      )}
+    </details>
+  )
 }
 
-function SolveCell({ label, value, accent }) {
+function SolveCell({ label, value, colorClass = 'text-ink-50' }) {
   return (
     <div className="text-left">
-      <div className="text-[10px] uppercase tracking-wide text-ink-500">{label}</div>
-      <div className={`tabular-nums text-sm font-semibold ${value != null ? SOLVE_CELL_ACCENT[accent] : 'text-ink-600'}`}>
+      <div className="text-xs uppercase tracking-wide text-ink-200 font-medium">{label}</div>
+      <div className={`tabular-nums text-base font-semibold ${value != null ? colorClass : 'text-ink-500'}`}>
         {value != null ? fmtTime(value) : '—'}
       </div>
     </div>
@@ -798,7 +854,7 @@ function BenchmarksSubsection({ perPuzzle }) {
       <div className="text-sm font-bold text-yellow-300 flex items-center gap-1.5">
         <span>⏱</span> Benchmarks
       </div>
-      <div className="text-xs text-ink-400 -mt-1">
+      <div className="text-xs text-ink-200 -mt-1">
         Target solve time vs averaged actual across demos. Negative delta = team is ahead of the benchmark.
       </div>
       {benchmarked.map(p => {

@@ -694,9 +694,14 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
       code: p.code || '',
       benchmark: p.benchmark || '',
       benchmarkName: p.benchmarkName || '',
+      goalMinutes: typeof p.goalMinutes === 'number' && !isNaN(p.goalMinutes) ? p.goalMinutes : null,
       times: [],
       solvedTimestamps: [],
-      demosSolved: new Set()
+      demosSolved: new Set(),
+      // Every recorded solve (including SUE) so the UI can list them under
+      // each puzzle row. SUE solves are flagged so they can be visually
+      // marked but still excluded from averages.
+      solves: []
     }
   }
 
@@ -705,13 +710,27 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
 
   for (const sess of relevant) {
     const stats = analyzePuzzles(sess.notes, game)
+    const allSolves = stats
+      .filter(p => p.solvedTs != null)
+      .sort((a, b) => a.solvedTs - b.solvedTs)
     // SUE-tagged solves are deliberately excluded from cross-session averages
     // (the user can mark unusual runs to keep trend math clean) but the per-
     // demo timeline in Review still shows them.
-    const regularSolves = stats
-      .filter(p => p.solvedTs != null && !p.isSue)
-      .sort((a, b) => a.solvedTs - b.solvedTs)
+    const regularSolves = allSolves.filter(p => !p.isSue)
 
+    // Track every solve for the per-puzzle drill-down list.
+    for (const p of allSolves) {
+      if (samples[p.id]) {
+        samples[p.id].solves.push({
+          sessionId: sess.id,
+          sessionDate: sess.date || '',
+          sessionTime: sess.time || '',
+          solvedTs: p.solvedTs,
+          timeOnPuzzle: p.timeOnPuzzle,
+          isSue: p.isSue
+        })
+      }
+    }
     for (const p of regularSolves) {
       if (samples[p.id]) {
         samples[p.id].demosSolved.add(sess.id)
@@ -741,13 +760,20 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
       code: s.code,
       benchmark: s.benchmark,
       benchmarkName: s.benchmarkName,
+      goalMinutes: s.goalMinutes,
       solveCount: count,
       solvedDemoCount: tsCount,
       avgSolveTime: avg,
       avgSolvedTs,
       fastestSolve: count ? Math.min(...s.times) : null,
       slowestSolve: count ? Math.max(...s.times) : null,
-      demosSolved: s.demosSolved.size
+      demosSolved: s.demosSolved.size,
+      // All solves (including SUE), newest-first sorted by date+time so the
+      // drill-down list reads chronologically without extra UI work.
+      solves: [...s.solves].sort((a, b) => {
+        const d = (b.sessionDate || '').localeCompare(a.sessionDate || '')
+        return d !== 0 ? d : (b.sessionTime || '').localeCompare(a.sessionTime || '')
+      })
     }
   })
 

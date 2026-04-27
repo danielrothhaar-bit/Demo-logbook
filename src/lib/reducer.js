@@ -258,7 +258,10 @@ export function reducer(state, action) {
           code: p.code || '',
           benchmark: p.benchmark || '',
           benchmarkName: p.benchmarkName || '',
-          dependsOn: Array.isArray(p.dependsOn) ? p.dependsOn : []
+          dependsOn: Array.isArray(p.dependsOn) ? p.dependsOn : [],
+          goalMinutes: typeof p.goalMinutes === 'number' && !isNaN(p.goalMinutes)
+            ? p.goalMinutes
+            : null
         })),
         components: (g.components || []).map(c => ({
           ...c,
@@ -338,7 +341,10 @@ export function reducer(state, action) {
           code: (action.code || '').trim(),
           benchmark: (action.benchmark || '').trim(),
           benchmarkName: (action.benchmarkName || '').trim(),
-          dependsOn: Array.isArray(action.dependsOn) ? action.dependsOn : []
+          dependsOn: Array.isArray(action.dependsOn) ? action.dependsOn : [],
+          goalMinutes: typeof action.goalMinutes === 'number' && !isNaN(action.goalMinutes)
+            ? action.goalMinutes
+            : null
         }
       ])
     case 'UPDATE_PUZZLE':
