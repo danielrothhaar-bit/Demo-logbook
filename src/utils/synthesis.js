@@ -223,15 +223,29 @@ export function analyzePuzzles(notes, game) {
     const dependsOn = Array.isArray(p.dependsOn) ? p.dependsOn : []
 
     let baselineTs = firstTouchTs
+    // Track which dependency anchored the baseline (if any) so the UI can
+    // show "took X from <prereq name>" instead of just an unlabeled duration.
+    // null = no prereq used (baseline = firstTouchTs).
+    let baselineSource = null
     if (dependsOn.length > 0 && solvedTs != null) {
-      const usablePrereqSolves = dependsOn
-        // 'game_start' is a virtual prereq pinned to demo start (elapsed 0).
-        .map(id => id === 'game_start' ? 0 : factsById.get(id)?.solvedTs)
-        .filter(t => t != null && t < solvedTs)
-      if (usablePrereqSolves.length > 0) {
-        baselineTs = Math.max(...usablePrereqSolves)
+      // Pick the latest prereq solve that happened before this puzzle's solve.
+      let bestTs = null
+      let bestId = null
+      for (const id of dependsOn) {
+        const t = id === 'game_start' ? 0 : factsById.get(id)?.solvedTs
+        if (t != null && t < solvedTs && (bestTs == null || t > bestTs)) {
+          bestTs = t
+          bestId = id
+        }
+      }
+      if (bestTs != null) {
+        baselineTs = bestTs
+        baselineSource = bestId
       }
     }
+    const baselineLabel = baselineSource === 'game_start'
+      ? 'Game Start'
+      : (baselineSource ? factsById.get(baselineSource)?.puzzle?.name || null : null)
     const timeOnPuzzle = solvedTs != null && baselineTs != null ? solvedTs - baselineTs : null
 
     const negativeNotes = tagged.filter(n => (n.categories || []).some(c => NEGATIVE.has(c)))
@@ -263,6 +277,8 @@ export function analyzePuzzles(notes, game) {
       status,
       firstTouchTs,
       baselineTs,
+      baselineSource,
+      baselineLabel,
       solvedTs,
       timeOnPuzzle,
       negativeCount,

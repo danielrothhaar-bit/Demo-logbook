@@ -1033,7 +1033,7 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
                   <div className="text-[11px] text-ink-400 mt-0.5 font-mono tabular-nums">
                     solved {fmtCountdown(p.solvedTs)}
                     {p.timeOnPuzzle != null && p.timeOnPuzzle > 0 && (
-                      <span> · took {fmtTime(p.timeOnPuzzle)}</span>
+                      <span> · took {fmtTime(p.timeOnPuzzle)}{p.baselineLabel ? ` from ${p.baselineLabel}` : ''}</span>
                     )}
                     {gap != null && (
                       <span> · {fmtTime(gap)} after #{i}</span>
@@ -1172,7 +1172,7 @@ function PuzzleStatusLine({ puzzle: p }) {
   if (p.status === 'solved') {
     parts.push(`solved at ${fmtCountdown(p.solvedTs)}`)
     if (p.timeOnPuzzle != null && p.timeOnPuzzle > 0) {
-      parts.push(`took ${fmtTime(p.timeOnPuzzle)}`)
+      parts.push(`took ${fmtTime(p.timeOnPuzzle)}${p.baselineLabel ? ` from ${p.baselineLabel}` : ''}`)
     }
   } else if (p.status === 'attempted') {
     if (p.firstTouchTs != null) parts.push(`first hit ${fmtCountdown(p.firstTouchTs)}`)
