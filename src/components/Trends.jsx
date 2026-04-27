@@ -9,9 +9,10 @@ const PAGES = [
 ]
 
 export default function Trends() {
-  const { state, categoryColor, gameById } = useStore()
+  const { state, categoryColor, gameById, newestGame } = useStore()
   const games = state.games
-  const [gameId, setGameId] = useState(games[0]?.id || '')
+  // Default to the newest game on each entry into Trends.
+  const [gameId, setGameId] = useState(() => newestGame()?.id || '')
   const [page, setPage] = useState('trends')
 
   return (
@@ -53,20 +54,35 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
   const game = gameById(gameId) || games[0]
   const agg = useMemo(() => aggregateAcrossSessions(state.sessions, game.id), [state.sessions, game.id])
   const solveTimes = useMemo(() => aggregatePuzzleSolveTimes(state.sessions, game), [state.sessions, game])
+  // Newest first so the default sits at the top of the dropdown.
+  const sortedGames = useMemo(
+    () => [...games].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    [games]
+  )
 
   return (
     <>
       {/* Game switcher */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
-        {games.map(g => (
-          <button
-            key={g.id}
-            onClick={() => setGameId(g.id)}
-            className={`px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap ${
-              g.id === game.id ? 'bg-accent-500 text-ink-50 border-accent-500' : 'bg-ink-800 border-ink-700 text-ink-200'
-            }`}
-          >{g.name}</button>
-        ))}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold flex-shrink-0">Game</span>
+        <div className="relative flex-1">
+          <select
+            value={game.id}
+            onChange={(e) => setGameId(e.target.value)}
+            className="w-full appearance-none bg-ink-800 border border-ink-700 rounded-xl pl-3 pr-9 py-2.5 outline-none focus:border-accent-500 text-sm font-medium text-ink-100"
+          >
+            {sortedGames.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          <svg
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-400"
+            width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
       </div>
 
       <DemoStats game={game} agg={agg} />
