@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseCountdown } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseCountdown, DEMO_TARGET_SEC } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
@@ -849,7 +849,15 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
     .filter(p => p.solvedTs != null)
     .sort((a, b) => a.solvedTs - b.solvedTs)
 
-  if (!solved.length) {
+  // Puzzles with a benchmark target (any puzzle, even unsolved) — render as
+  // vertical guide lines so designers can see actual solve vs target.
+  const benchmarks = (puzzles || [])
+    .map(p => ({ ...p, benchSec: parseCountdown(p.benchmark) }))
+    .filter(p => p.benchSec != null)
+  const benchSecById = {}
+  for (const b of benchmarks) benchSecById[b.id] = b.benchSec
+
+  if (!solved.length && !benchmarks.length) {
     return (
       <Section title="Puzzle solve timeline" hint="When each puzzle was marked solved this demo.">
         <Empty text="No puzzles marked solved yet." />
@@ -857,31 +865,58 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
     )
   }
 
-  // Puzzles with a benchmark target (any puzzle, even unsolved) — render as
-  // vertical guide lines so designers can see actual solve vs target.
-  const benchmarks = (puzzles || [])
-    .map(p => ({ ...p, benchSec: parseCountdown(p.benchmark) }))
-    .filter(p => p.benchSec != null)
-
-  // Span the bar across the demo duration, but always at least far enough to
-  // include the last solve and any benchmark target so nothing is clipped.
+  // Always extend the axis through 60:00 so the timer-end line is visible,
+  // and out to the latest event (solve or benchmark) plus any overtime.
   const span = Math.max(
     totalSec || 0,
+    DEMO_TARGET_SEC,
     ...solved.map(p => p.solvedTs),
-    ...benchmarks.map(p => p.benchSec),
-    60
+    ...benchmarks.map(p => p.benchSec)
   )
+
+  // 10-minute grid ticks across the axis underneath the track.
+  const TICK_STEP = 600
+  const ticks = []
+  for (let t = 0; t <= span; t += TICK_STEP) ticks.push(t)
+  const showTimerEndLine = span >= DEMO_TARGET_SEC
+  const BENCHMARK_TOLERANCE_SEC = 180 // ±3 min from goal still counts as "on time"
 
   return (
     <Section title="Puzzle solve timeline" hint={`${solved.length} of ${puzzles.length} puzzles solved.`}>
-      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-3">
-        <div className="relative h-16 mt-4">
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-2">
+        <div className="relative h-20 mt-6">
+          {/* 10-minute grid ticks — drawn first so everything else stacks on top. */}
+          {ticks.map(t => {
+            if (t === 0 || t > span) return null
+            if (showTimerEndLine && t === DEMO_TARGET_SEC) return null
+            const pct = (t / span) * 100
+            return (
+              <div key={`grid-${t}`}
+                className="absolute top-0 bottom-0 w-px bg-ink-700/50"
+                style={{ left: `${pct}%` }}
+              />
+            )
+          })}
+
+          {/* Timer-end line — solid, with a small label so it can't be missed. */}
+          {showTimerEndLine && (
+            <div
+              className="absolute top-0 bottom-0 -translate-x-1/2"
+              style={{ left: `${(DEMO_TARGET_SEC / span) * 100}%` }}
+            >
+              <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-rose-500/80" />
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-400/60 text-[9px] font-bold text-rose-200 whitespace-nowrap">
+                ⏰ Timer end
+              </div>
+            </div>
+          )}
+
+          {/* Center axis bar */}
           <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
 
-          {/* Benchmark vertical guide lines — drawn under the dots so dots stay legible.
-              Always-visible chip above the line shows the benchmark name (or time fallback). */}
+          {/* Benchmark vertical guide lines — yellow goal markers. */}
           {benchmarks.map(p => {
-            const pct = span > 0 ? Math.min(100, Math.max(0, (p.benchSec / span) * 100)) : 0
+            const pct = Math.min(100, Math.max(0, (p.benchSec / span) * 100))
             const label = p.benchmarkName || fmtCountdown(p.benchSec)
             return (
               <div
@@ -900,30 +935,83 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
             )
           })}
 
-          {/* Solve dots */}
+          {/* Solve dots — green/red for benchmarked puzzles based on ±3-min window, else yellow. */}
           {solved.map((p, i) => {
-            const pct = span > 0 ? Math.min(100, Math.max(0, (p.solvedTs / span) * 100)) : 0
+            const pct = Math.min(100, Math.max(0, (p.solvedTs / span) * 100))
+            const benchSec = benchSecById[p.id]
+            const hasBenchmark = benchSec != null
+            const onTime = hasBenchmark && Math.abs(p.solvedTs - benchSec) <= BENCHMARK_TOLERANCE_SEC
+            const dotClass = !hasBenchmark
+              ? 'bg-yellow-400 shadow-yellow-400/30'
+              : onTime
+                ? 'bg-emerald-400 shadow-emerald-400/40'
+                : 'bg-rose-500 shadow-rose-500/40'
+            const deltaLabel = hasBenchmark
+              ? (() => {
+                  const delta = p.solvedTs - benchSec
+                  const abs = Math.abs(delta)
+                  if (abs === 0) return 'on goal'
+                  return `${delta > 0 ? '+' : '−'}${fmtTime(abs)} ${delta > 0 ? 'after' : 'before'} goal`
+                })()
+              : null
             return (
               <div
                 key={p.id}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"
                 style={{ left: `${pct}%` }}
               >
-                <span className="block w-7 h-7 rounded-full bg-yellow-400 border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg shadow-yellow-400/30">
+                <span className={`block w-7 h-7 rounded-full ${dotClass} border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg`}>
                   {i + 1}
                 </span>
-                {/* Hover label */}
                 <div className="absolute left-1/2 -translate-x-1/2 -top-9 px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl">
                   {p.name}
                   <span className="text-ink-400 font-mono ml-1">· {fmtCountdown(p.solvedTs)}</span>
+                  {deltaLabel && (
+                    <span className={`ml-1 ${onTime ? 'text-emerald-300' : 'text-rose-300'}`}>· {deltaLabel}</span>
+                  )}
                 </div>
               </div>
             )
           })}
         </div>
-        <div className="flex justify-between text-[10px] text-ink-500 font-mono tabular-nums pt-3">
-          <span>{fmtCountdown(0)}</span>
-          <span>{fmtCountdown(span)}</span>
+
+        {/* Minute axis underneath — vertical tick + label per 10 minutes. */}
+        <div className="relative h-5">
+          {ticks.map(t => {
+            if (t > span) return null
+            const pct = (t / span) * 100
+            const isTimerEnd = showTimerEndLine && t === DEMO_TARGET_SEC
+            return (
+              <div key={`label-${t}`}
+                className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                style={{ left: `${pct}%` }}
+              >
+                <span className={`w-px h-1.5 ${isTimerEnd ? 'bg-rose-400' : 'bg-ink-500'}`} />
+                <span className={`text-[10px] font-mono tabular-nums whitespace-nowrap ${
+                  isTimerEnd ? 'text-rose-300 font-semibold' : 'text-ink-400'
+                }`}>
+                  {t / 60}m
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-400 pt-1">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" /> solved
+          </span>
+          {benchmarks.length > 0 && (
+            <>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> within ±3 min of benchmark
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> off benchmark by &gt;3 min
+              </span>
+            </>
+          )}
         </div>
 
         <div className="space-y-1.5 pt-1">
