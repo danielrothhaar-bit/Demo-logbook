@@ -154,6 +154,26 @@ export default function NoteEditor({ note, sessionId, onClose }) {
             })}
           </TagSection>
 
+          {/* SUE toggle — same state as the chip above, promoted to a dedicated
+              control because the tag has special semantics (excludes the puzzle
+              solve from cross-session averages). */}
+          <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-ink-900 border border-ink-700 cursor-pointer active:bg-ink-700">
+            <input
+              type="checkbox"
+              checked={categories.includes('SUE')}
+              onChange={(e) => setCategories(prev =>
+                e.target.checked
+                  ? (prev.includes('SUE') ? prev : [...prev, 'SUE'])
+                  : prev.filter(c => c !== 'SUE')
+              )}
+              className="w-5 h-5 accent-orange-500 flex-shrink-0"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-orange-300">Mark as SUE</div>
+              <div className="text-[11px] text-ink-500">Excluded from trends averages; still shown on the timeline.</div>
+            </div>
+          </label>
+
           {game?.puzzles?.length > 0 && (
             <MultiSelectDropdown
               title="Puzzles"
