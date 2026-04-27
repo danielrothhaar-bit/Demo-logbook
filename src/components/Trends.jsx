@@ -748,10 +748,26 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
   const hasAvg = p.avgSolveTime != null
   const widthPct = hasAvg ? Math.max(8, (p.avgSolveTime / maxAvg) * 100) : 0
   const goalSec = p.goalMinutes != null ? p.goalMinutes * 60 : null
-  const avgOffGoal = goalSec != null && hasAvg && Math.abs(p.avgSolveTime - goalSec) > 60
-  // Avg goes red when the average deviates more than ±60 sec from the puzzle's
-  // configured Goal Time; otherwise it stays white like fastest/slowest.
-  const avgClass = avgOffGoal ? 'text-rose-400' : 'text-ink-50'
+  // Goal-aware coloring:
+  //   delta > 60s   → red    (more than a minute slower than goal)
+  //   delta < -60s  → yellow (more than a minute faster than goal)
+  //   |delta| ≤ 60s → green  (within ±1 min of goal)
+  // Without a goal we fall back to the neutral white avg + yellow bar.
+  let avgClass = 'text-ink-50'
+  let barClass = 'bg-yellow-400/70'
+  if (goalSec != null && hasAvg) {
+    const delta = p.avgSolveTime - goalSec
+    if (delta > 60) {
+      avgClass = 'text-rose-400'
+      barClass = 'bg-rose-400/70'
+    } else if (delta < -60) {
+      avgClass = 'text-yellow-300'
+      barClass = 'bg-yellow-400/70'
+    } else {
+      avgClass = 'text-emerald-400'
+      barClass = 'bg-emerald-400/70'
+    }
+  }
   const allSolves = p.solves || []
 
   const openDemo = (sessionId) => {
@@ -789,7 +805,7 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
         </div>
         {hasAvg && (
           <div className="w-full h-1 mt-2 bg-ink-800 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${avgOffGoal ? 'bg-rose-400/70' : 'bg-yellow-400/70'}`} style={{ width: `${widthPct}%` }} />
+            <div className={`h-full rounded-full ${barClass}`} style={{ width: `${widthPct}%` }} />
           </div>
         )}
       </summary>
