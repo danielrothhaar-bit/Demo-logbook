@@ -11,6 +11,7 @@ export const DEFAULT_CATEGORIES = [
   'Clue',
   'Puzzle Solved',
   'SFX',
+  'Quote',
   'Feedback Discussion'
 ]
 
@@ -25,6 +26,7 @@ export const CATEGORY_COLORS = {
   'Puzzle Solved':       '#2dd4bf',
   'SFX':                 '#f0abfc',
   'SUE':                 '#f97316',
+  'Quote':               '#a5b4fc',
   'Feedback Discussion': '#22d3ee'
 }
 

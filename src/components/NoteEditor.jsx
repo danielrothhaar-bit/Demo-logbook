@@ -16,7 +16,8 @@ const ACTION_TAGS = [
   'Hint',
   'Clue',
   'SFX',
-  'SUE'
+  'SUE',
+  'Quote'
 ]
 
 export default function NoteEditor({ note, sessionId, onClose }) {

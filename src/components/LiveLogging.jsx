@@ -17,7 +17,8 @@ const ACTIONS = [
   { id: 'wow',           label: 'Wow',           accent: 'cyan',    tag: 'Wow Moment',    hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'frustration',   label: 'Frustration',   accent: 'rose',    tag: 'Frustration',   hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'hint',          label: 'Hint',          accent: 'violet',  tag: 'Hint',          hasText: true,  hasPuzzle: true, hasComponent: false },
-  { id: 'clue',          label: 'Clue',          accent: 'orange',  tag: 'Clue',          hasText: true,  hasPuzzle: true, hasComponent: false }
+  { id: 'clue',          label: 'Clue',          accent: 'orange',  tag: 'Clue',          hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'quote',         label: 'Quotes',        accent: 'indigo',  tag: 'Quote',         hasText: true,  hasPuzzle: true, hasComponent: false }
 ]
 
 const ACCENT = {
@@ -28,7 +29,8 @@ const ACCENT = {
   cyan:    { btn: 'bg-cyan-400 active:bg-cyan-500 text-ink-950',        dot: 'bg-cyan-300' },
   grey:    { btn: 'bg-ink-300 active:bg-ink-400 text-ink-950',          dot: 'bg-ink-300' },
   rose:    { btn: 'bg-rose-600 active:bg-rose-700 text-white',          dot: 'bg-rose-400' },
-  violet:  { btn: 'bg-violet-400 active:bg-violet-500 text-ink-950',    dot: 'bg-violet-400' }
+  violet:  { btn: 'bg-violet-400 active:bg-violet-500 text-ink-950',    dot: 'bg-violet-400' },
+  indigo:  { btn: 'bg-indigo-300 active:bg-indigo-400 text-ink-950',    dot: 'bg-indigo-300' }
 }
 
 export default function LiveLogging() {
@@ -325,7 +327,7 @@ export default function LiveLogging() {
                 </span>
               )}
             </div>
-            <div className="mt-3 flex items-center justify-center gap-3">
+            <div className="mt-3 flex items-center justify-center gap-3 flex-wrap">
               {activeSession.timerRunning ? (
                 <button
                   onClick={() => dispatch({ type: 'TIMER_PAUSE', sessionId: activeSession.id })}
@@ -345,6 +347,15 @@ export default function LiveLogging() {
                 }}
                 className="px-4 py-3 rounded-full bg-ink-700 text-ink-100 font-medium active:bg-ink-600"
               >Reset</button>
+              <button
+                onClick={() => {
+                  if (confirm('Finish this demo and move to review?')) {
+                    dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
+                    dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
+                  }
+                }}
+                className="px-4 py-3 rounded-full bg-emerald-500 text-ink-950 font-semibold active:bg-emerald-600"
+              >Finish Demo</button>
             </div>
           </div>
 
@@ -395,11 +406,12 @@ export default function LiveLogging() {
             </>
           )}
 
-          {/* Action button grid — 4 rows × 2 columns */}
+          {/* Action button grid — primary 4×2 grid plus a 5th row with the
+              Quotes button anchored to the right cell (left cell empty). */}
           <div className="grid grid-cols-2 gap-2">
             {ACTIONS.map(action => {
               const disabled = action.id === 'puzzle_solved' && puzzleSolvedDisabled
-              return (
+              const button = (
                 <button
                   key={action.id}
                   onClick={() => setPendingAction(action)}
@@ -409,32 +421,18 @@ export default function LiveLogging() {
                   {action.label}
                 </button>
               )
+              // Quotes is the lone 9th button — push it into the right cell of
+              // a new row by emitting an empty left-cell spacer first.
+              if (action.id === 'quote') {
+                return [
+                  <div key="quote-spacer" aria-hidden="true" />,
+                  button
+                ]
+              }
+              return button
             })}
           </div>
 
-          {/* Finish Demo */}
-          <button
-            onClick={() => {
-              if (confirm('Finish this demo and move to review?')) {
-                dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
-                dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
-              }
-            }}
-            className="w-full rounded-2xl bg-emerald-500/15 border border-emerald-400/50 active:bg-emerald-500/25 py-4 px-4 text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-emerald-100">Finish Demo</div>
-                <div className="text-[12px] text-emerald-200/70">Stop the timer and move to review.</div>
-              </div>
-            </div>
-          </button>
         </>
       )}
 
