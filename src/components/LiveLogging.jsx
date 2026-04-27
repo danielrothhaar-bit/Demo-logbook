@@ -867,7 +867,7 @@ function DesignerPicker({ designers, onPick }) {
       </div>
       {designers.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-ink-400">
-          No designers yet — add one in Admin → Designers.
+          No users yet — add one in Admin → Users.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">

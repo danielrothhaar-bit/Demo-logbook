@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useStore, initialsFromName, parseBenchmark } from '../store.jsx'
 
 const SECTIONS = [
-  { id: 'designers', label: 'Designers' },
+  { id: 'designers', label: 'Users' },
   { id: 'games',     label: 'Games' }
 ]
 
@@ -45,7 +45,7 @@ function DesignersPanel() {
   const { state, dispatch } = useStore()
 
   const add = () => {
-    const name = (prompt('Designer name?') || '').trim()
+    const name = (prompt('User name?') || '').trim()
     if (!name) return
     const usedColors = new Set(state.designers.map(d => d.color))
     const color = DESIGNER_COLORS.find(c => !usedColors.has(c)) || DESIGNER_COLORS[0]
@@ -57,7 +57,7 @@ function DesignersPanel() {
       <button
         onClick={add}
         className="w-full rounded-2xl bg-emerald-500 active:bg-emerald-600 text-ink-950 py-3.5 font-bold"
-      >+ Add Designer</button>
+      >+ Add User</button>
 
       <div className="space-y-2">
         {state.designers.map(d => <DesignerRow key={d.id} designer={d} />)}
@@ -99,7 +99,7 @@ function DesignerRow({ designer }) {
           className="px-3 py-2 rounded-lg bg-ink-700 active:bg-ink-600 text-sm">Edit</button>
         <button
           onClick={() => {
-            if (inUse) return alert('Cannot delete — designer has notes in past demos.')
+            if (inUse) return alert('Cannot delete — user has notes in past demos.')
             if (confirm(`Delete ${designer.name}?`)) dispatch({ type: 'DELETE_DESIGNER', id: designer.id })
           }}
           disabled={inUse}

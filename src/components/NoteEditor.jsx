@@ -104,7 +104,7 @@ export default function NoteEditor({ note, sessionId, onClose }) {
                 }`} />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Designer</div>
+              <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">User</div>
               <select value={designerId} onChange={(e) => setDesignerId(e.target.value)}
                 className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500">
                 {state.designers.map(d => <option key={d.id} value={d.id}>{d.name} ({d.initials})</option>)}

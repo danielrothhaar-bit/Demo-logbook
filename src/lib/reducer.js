@@ -300,7 +300,7 @@ export function reducer(state, action) {
       const id = action.id || ('d_' + uid())
       const designer = {
         id,
-        name: action.name || 'New designer',
+        name: action.name || 'New user',
         initials: action.initials || initialsFromName(action.name),
         color: action.color || '#94a3b8'
       }

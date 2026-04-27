@@ -40,7 +40,7 @@ function downloadSessionCsv(session, { gameName, designerById, gameById }) {
   lines.push(['Time', session.time || ''].map(csvCell).join(','))
   lines.push(['Team Size', session.teamSize ?? ''].map(csvCell).join(','))
   lines.push(['Experience', session.experience || ''].map(csvCell).join(','))
-  lines.push(['Designers', designerNames.join('; ')].map(csvCell).join(','))
+  lines.push(['Users', designerNames.join('; ')].map(csvCell).join(','))
   lines.push(['Total Notes', session.notes.length].map(csvCell).join(','))
   lines.push(['Elapsed', fmtTime(totalSec)].map(csvCell).join(','))
   const adj = session.timerAdjustment || 0
@@ -48,7 +48,7 @@ function downloadSessionCsv(session, { gameName, designerById, gameById }) {
     .map(csvCell).join(','))
   lines.push(['Status', session.ended ? 'Ended' : 'In progress'].map(csvCell).join(','))
   lines.push('')
-  lines.push(['Timestamp', 'Designer', 'Kind', 'Categories', 'Text', 'Puzzles', 'Components', 'Has Photo']
+  lines.push(['Timestamp', 'User', 'Kind', 'Categories', 'Text', 'Puzzles', 'Components', 'Has Photo']
     .map(csvCell).join(','))
 
   const sorted = [...session.notes].sort((a, b) => a.timestamp - b.timestamp)
@@ -199,7 +199,7 @@ function SessionPicker() {
           </div>
 
           <div>
-            <div className="text-xs text-ink-400 mb-1">Designer</div>
+            <div className="text-xs text-ink-400 mb-1">User</div>
             <div className="flex flex-wrap gap-1.5">
               {state.designers.map(d => {
                 const active = filterDesignerIds.includes(d.id)
@@ -685,7 +685,7 @@ function Filters({ session, filterCats, setFilterCats, filterDesigners, setFilte
         </div>
 
         <div>
-          <div className="text-xs text-ink-400 mb-1">Designers</div>
+          <div className="text-xs text-ink-400 mb-1">Users</div>
           <div className="flex flex-wrap gap-1.5">
             {designers.map(d => {
               const active = filterDesigners.includes(d.id)
@@ -791,7 +791,7 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
               <span className="text-rose-300 font-semibold">{z.notes.length} negative notes</span>
               <span className="text-ink-400">over {fmtTime(z.duration)}</span>
               {z.designerIds.length > 1 && (
-                <span className="text-ink-400">· {z.designerIds.length} designers</span>
+                <span className="text-ink-400">· {z.designerIds.length} users</span>
               )}
             </div>
             <div className="mt-2 space-y-1.5">
@@ -810,7 +810,7 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
         ))}
       </Section>
 
-      <Section title="Consensus observations" hint="Multiple designers logged the same kind of moment within ~90s.">
+      <Section title="Consensus observations" hint="Multiple users logged the same kind of moment within ~90s.">
         {consensus.length === 0 && <Empty text="No consensus moments detected." />}
         {consensus.map((c, i) => (
           <div key={i} className="rounded-2xl bg-ink-800 border border-emerald-500/40 p-3 animate-fadeUp">
@@ -820,7 +820,7 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
                     style={{ backgroundColor: `${categoryColor(c.category)}22`, color: categoryColor(c.category) }}>
                 {c.category}
               </span>
-              <span className="text-emerald-300 font-semibold">· {c.designerIds.length} designers agree</span>
+              <span className="text-emerald-300 font-semibold">· {c.designerIds.length} users agree</span>
             </div>
             <div className="mt-2 space-y-1.5">
               {c.notes.map(n => {
@@ -836,7 +836,7 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
         ))}
       </Section>
 
-      <Section title="Divergence" hint="Designers logged opposite reactions in the same window.">
+      <Section title="Divergence" hint="Users logged opposite reactions in the same window.">
         {divergence.length === 0 && <Empty text="No contradictions detected." />}
         {divergence.map((d, i) => (
           <div key={i} className="rounded-2xl bg-ink-800 border border-rose-500/40 p-3 animate-fadeUp">
@@ -863,7 +863,7 @@ function Synthesis({ consensus, divergence, duplicates, puzzleStats, stuckZones,
         ))}
       </Section>
 
-      <Section title="Likely duplicates" hint="Same observation logged by 2+ designers ~30s apart.">
+      <Section title="Likely duplicates" hint="Same observation logged by 2+ users ~30s apart.">
         {duplicates.length === 0 && <Empty text="No duplicates detected." />}
         {duplicates.map((g, i) => (
           <MergedCard key={i} group={g} />
@@ -1360,7 +1360,7 @@ function Summary({ summary, metrics, session }) {
         {summary.issues.length === 0 ? <Empty text="No issues flagged." /> :
           summary.issues.map((i, idx) => (
             <SummaryRow key={idx} index={idx + 1} text={i.text}
-              meta={`${fmtCountdown(i.timestamp)} · ${i.category}${i.designerCount > 1 ? ` · ${i.designerCount} designers agree` : ''}`} />
+              meta={`${fmtCountdown(i.timestamp)} · ${i.category}${i.designerCount > 1 ? ` · ${i.designerCount} users agree` : ''}`} />
           ))
         }
       </Section>
@@ -1369,7 +1369,7 @@ function Summary({ summary, metrics, session }) {
         {summary.wins.length === 0 ? <Empty text="No wins flagged." /> :
           summary.wins.map((w, idx) => (
             <SummaryRow key={idx} index={idx + 1} text={w.text}
-              meta={`${fmtCountdown(w.timestamp)} · ${w.category}${w.designerCount > 1 ? ` · ${w.designerCount} designers agree` : ''}`} positive />
+              meta={`${fmtCountdown(w.timestamp)} · ${w.category}${w.designerCount > 1 ? ` · ${w.designerCount} users agree` : ''}`} positive />
           ))
         }
       </Section>

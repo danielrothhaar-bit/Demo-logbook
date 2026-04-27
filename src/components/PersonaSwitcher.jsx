@@ -15,7 +15,7 @@ export default function PersonaSwitcher() {
             ? 'bg-accent-500/15 border-accent-400/60'
             : 'bg-ink-800 border-ink-700'
         }`}
-        aria-label="Switch designer persona"
+        aria-label="Switch user persona"
       >
         {activeDesigner ? (
           <>
@@ -76,7 +76,7 @@ export default function PersonaSwitcher() {
               </button>
             ))}
             <div className="px-4 py-2 text-[11px] text-ink-400 border-t border-ink-700">
-              Multi-designer collab simulated locally — toggle to see merged feed.
+              Multi-user collab simulated locally — toggle to see merged feed.
             </div>
           </div>
         </>
