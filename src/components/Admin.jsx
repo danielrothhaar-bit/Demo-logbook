@@ -314,7 +314,7 @@ function NamedItemList({ title, hint, items, kind, onAdd, onUpdate, onDelete, on
       {hint && <div className="text-[11px] text-ink-500 mb-2">{hint}</div>}
       <div className="space-y-1.5">
         {items.map((item, i) => (
-          <NamedItemRow key={item.id} item={item} kind={kind} allItems={items}
+          <NamedItemRow key={item.id} item={item} kind={kind} allItems={items} index={i}
             canUp={i > 0} canDown={i < items.length - 1}
             onMoveUp={() => move(i, -1)}
             onMoveDown={() => move(i, 1)}
@@ -345,7 +345,7 @@ function NamedItemList({ title, hint, items, kind, onAdd, onUpdate, onDelete, on
   )
 }
 
-function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
+function NamedItemRow({ item, kind, allItems = [], index = 0, canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(item.name)
   const [code, setCode] = useState(item.code || '')
@@ -468,8 +468,14 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
       </div>
     )
   }
+  // Zebra stripe: alternate background between ink-800 and a slightly lighter
+  // shade so the eye can scan dense lists more easily. Borders shift in step
+  // with the bg so the lighter row's edge stays visible.
+  const stripeClasses = index % 2 === 0
+    ? 'bg-ink-800 border-ink-700'
+    : 'bg-ink-700 border-ink-600'
   return (
-    <div className="flex items-center gap-1.5 bg-ink-800 border border-ink-700 rounded-lg pl-1 pr-1 py-1">
+    <div className={`flex items-center gap-1.5 border rounded-lg pl-1 pr-1 py-1 ${stripeClasses}`}>
       <button onClick={onMoveUp} disabled={!canUp}
         className="w-7 h-7 rounded-md text-ink-400 active:bg-ink-700 disabled:opacity-20 flex-shrink-0">↑</button>
       <button onClick={onMoveDown} disabled={!canDown}
