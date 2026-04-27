@@ -3,8 +3,7 @@ import { useStore, initialsFromName, parseBenchmark } from '../store.jsx'
 
 const SECTIONS = [
   { id: 'designers', label: 'Designers' },
-  { id: 'games',     label: 'Games' },
-  { id: 'tags',      label: 'Quick tags' }
+  { id: 'games',     label: 'Games' }
 ]
 
 export default function Admin() {
@@ -30,7 +29,6 @@ export default function Admin() {
 
       {section === 'designers' && <DesignersPanel />}
       {section === 'games' && <GamesPanel />}
-      {section === 'tags' && <TagsPanel />}
     </div>
   )
 }
@@ -358,7 +356,11 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
   const [dependsOn, setDependsOn] = useState(
     Array.isArray(item.dependsOn) ? item.dependsOn : []
   )
+  // Components only — flags whether this component is in scope for the
+  // Tech Issue picker in Live logging.
+  const [hasTech, setHasTech] = useState(!!item.hasTech)
   const isPuzzle = kind === 'puzzle'
+  const isComponent = kind === 'component'
   const save = () => {
     const v = name.trim()
     if (!v) return
@@ -370,6 +372,7 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
       const validIds = new Set(allItems.map(p => p.id))
       patch.dependsOn = dependsOn.filter(id => id !== item.id && validIds.has(id))
     }
+    if (isComponent) patch.hasTech = hasTech
     onSave(patch)
     setEditing(false)
   }
@@ -431,6 +434,26 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
             </>
           )
         })()}
+        {isComponent && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold w-20 flex-shrink-0">Has tech</span>
+            <button
+              type="button"
+              onClick={() => setHasTech(v => !v)}
+              role="switch"
+              aria-checked={hasTech}
+              className={`relative inline-flex items-center w-12 h-6 rounded-full transition-colors flex-shrink-0 ${
+                hasTech ? 'bg-emerald-500' : 'bg-ink-700'
+              }`}
+            >
+              <span className={`inline-block w-5 h-5 rounded-full bg-white shadow transform transition-transform ${
+                hasTech ? 'translate-x-6' : 'translate-x-0.5'
+              }`} />
+            </button>
+            <span className="text-xs text-ink-300">{hasTech ? 'Yes' : 'No'}</span>
+            <span className="text-[10px] text-ink-500 ml-auto">Show in Tech Issue picker</span>
+          </div>
+        )}
         <div className="flex items-center justify-end gap-1">
           <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2 py-1">Cancel</button>
           <button onClick={save} className="text-xs px-3 py-1.5 rounded-md bg-emerald-500 text-ink-950 font-semibold">Save</button>
@@ -450,6 +473,12 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
         </span>
       )}
       <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
+      {isComponent && item.hasTech && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 flex-shrink-0"
+              title="Available in the Tech Issue picker">
+          ⚡ tech
+        </span>
+      )}
       {isPuzzle && Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && (() => {
         const names = item.dependsOn
           .map(id => allItems.find(p => p.id === id)?.name)
@@ -479,69 +508,6 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
       })()}
       <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2 flex-shrink-0">Edit</button>
       <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30 flex-shrink-0">✕</button>
-    </div>
-  )
-}
-
-// ---------- Quick tags ----------
-
-function TagsPanel() {
-  const { state, dispatch, categoryColor } = useStore()
-  const [draft, setDraft] = useState('')
-
-  // Every change persists immediately — no separate Save step
-  const setList = (next) => dispatch({ type: 'SET_CATEGORIES', categories: next })
-
-  const add = () => {
-    const v = draft.trim()
-    if (!v || state.categories.includes(v)) return
-    setList([...state.categories, v])
-    setDraft('')
-  }
-  const remove = (c) => setList(state.categories.filter(x => x !== c))
-  const move = (i, dir) => {
-    const j = i + dir
-    if (j < 0 || j >= state.categories.length) return
-    const next = [...state.categories]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    setList(next)
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="text-[11px] text-ink-500 px-1">
-        Tags appear as quick-buttons during live logging. Voice notes that mention these phrases auto-tag.
-        Changes save instantly.
-      </div>
-
-      <div className="space-y-2">
-        {state.categories.map((c, i) => (
-          <div key={c} className="flex items-center gap-2 bg-ink-800 border border-ink-700 rounded-xl pl-3 pr-1 py-1">
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: categoryColor(c) }} />
-            <span className="flex-1 truncate">{c}</span>
-            <button onClick={() => move(i, -1)} disabled={i === 0}
-              className="w-9 h-9 rounded-lg active:bg-ink-700 disabled:opacity-30">↑</button>
-            <button onClick={() => move(i, 1)} disabled={i === state.categories.length - 1}
-              className="w-9 h-9 rounded-lg active:bg-ink-700 disabled:opacity-30">↓</button>
-            <button onClick={() => remove(c)}
-              className="w-9 h-9 rounded-lg active:bg-rose-900/40 text-rose-300">✕</button>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="New tag…"
-          className="flex-1 bg-ink-800 border border-ink-700 rounded-xl px-3 py-2.5 outline-none focus:border-accent-500"
-        />
-        <button onClick={add} disabled={!draft.trim()}
-          className="px-4 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-30 text-ink-950 font-semibold">
-          Add
-        </button>
-      </div>
     </div>
   )
 }

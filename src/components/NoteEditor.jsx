@@ -4,6 +4,19 @@ import { analyzeNoteText } from '../utils/autoTag.js'
 
 const toggle = (arr, v) => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]
 
+// Mirrors the action-button tag set in Live Logging — these are the only tags
+// designers can apply via the editor. Existing notes that carry legacy tags
+// still expose them so the user can remove them.
+const ACTION_TAGS = [
+  'Puzzle Solved',
+  'Game Change',
+  'Tech Issue',
+  'Wow Moment',
+  'Frustration',
+  'Hint',
+  'Clue'
+]
+
 export default function NoteEditor({ note, sessionId, onClose }) {
   const { state, dispatch, categoryColor, gameById } = useStore()
 
@@ -20,15 +33,17 @@ export default function NoteEditor({ note, sessionId, onClose }) {
   const tsValid = parseCountdown(tsStr) != null
   const isFeedback = note.kind === 'feedback'
 
-  // Categories available as quick tags. Hide Feedback Discussion for normal
-  // notes (it's a separate mode), but keep it for feedback notes that
-  // legitimately carry the tag.
-  const availableCats = useMemo(() => (
-    isFeedback ? state.categories : state.categories.filter(c => c !== 'Feedback Discussion')
-  ), [state.categories, isFeedback])
+  // Tag list: the action-button tags (plus Feedback Discussion for feedback
+  // notes), with any pre-existing tag on this note that isn't in that base
+  // set surfaced too so the user can still see and remove legacy tags.
+  const availableCats = useMemo(() => {
+    const base = isFeedback ? [...ACTION_TAGS, 'Feedback Discussion'] : ACTION_TAGS
+    const extras = (note.categories || []).filter(c => !base.includes(c))
+    return [...base, ...extras]
+  }, [isFeedback, note.categories])
 
   const reDetect = () => {
-    const detected = analyzeNoteText(text, { categories: state.categories, game })
+    const detected = analyzeNoteText(text, { categories: availableCats, game })
     setCategories(prev => [...new Set([...prev, ...detected.categories])])
     setPuzzleIds(prev => [...new Set([...prev, ...detected.puzzleIds])])
     setComponentIds(prev => [...new Set([...prev, ...detected.componentIds])])
@@ -116,7 +131,7 @@ export default function NoteEditor({ note, sessionId, onClose }) {
               className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 resize-none" />
           </div>
 
-          <TagSection title="Quick tags">
+          <TagSection title="Tags">
             {availableCats.map(c => {
               const active = categories.includes(c)
               return (

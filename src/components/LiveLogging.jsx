@@ -12,9 +12,9 @@ import ClickablePhoto from './ClickablePhoto.jsx'
 const ACTIONS = [
   { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false },
   { id: 'game_change',   label: 'Game Change',   accent: 'blue',    tag: 'Game Change',   hasText: true,  hasPuzzle: true, hasComponent: false },
-  { id: 'tech_issue',    label: 'Tech Issue',    accent: 'orange',  tag: 'Tech Issue',    hasText: false, hasPuzzle: true, hasComponent: true },
+  { id: 'tech_issue',    label: 'Tech Issue',    accent: 'yellow',  tag: 'Tech Issue',    hasText: true,  hasPuzzle: false, hasComponent: true, filterTechComponents: true },
   { id: 'note',          label: 'Note',          accent: 'grey',    tag: null,            hasText: true,  hasPuzzle: false, hasComponent: false, requireText: true },
-  { id: 'wow',           label: 'Wow',           accent: 'emerald', tag: 'Wow Moment',    hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'wow',           label: 'Wow',           accent: 'cyan',    tag: 'Wow Moment',    hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'frustration',   label: 'Frustration',   accent: 'rose',    tag: 'Frustration',   hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'hint',          label: 'Hint',          accent: 'violet',  tag: 'Hint',          hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'clue',          label: 'Clue',          accent: 'orange',  tag: 'Clue',          hasText: true,  hasPuzzle: true, hasComponent: false }
@@ -24,6 +24,8 @@ const ACCENT = {
   emerald: { btn: 'bg-emerald-500 active:bg-emerald-600 text-ink-950', dot: 'bg-emerald-400' },
   blue:    { btn: 'bg-blue-500 active:bg-blue-600 text-white',          dot: 'bg-blue-400' },
   orange:  { btn: 'bg-orange-500 active:bg-orange-600 text-white',      dot: 'bg-orange-400' },
+  yellow:  { btn: 'bg-yellow-400 active:bg-yellow-500 text-ink-950',    dot: 'bg-yellow-300' },
+  cyan:    { btn: 'bg-cyan-400 active:bg-cyan-500 text-ink-950',        dot: 'bg-cyan-300' },
   grey:    { btn: 'bg-ink-600 active:bg-ink-500 text-ink-100',          dot: 'bg-ink-400' },
   rose:    { btn: 'bg-rose-600 active:bg-rose-700 text-white',          dot: 'bg-rose-400' },
   violet:  { btn: 'bg-violet-400 active:bg-violet-500 text-ink-950',    dot: 'bg-violet-400' }
@@ -418,6 +420,10 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
     ? allPuzzles.filter(p => !alreadySolvedPuzzleIds.has(p.id))
     : allPuzzles
   const allComponents = game?.components || []
+  // Tech Issue's component picker only shows components flagged "Has tech".
+  const availableComponents = action.filterTechComponents
+    ? allComponents.filter(c => c.hasTech)
+    : allComponents
 
   const handlePhoto = (e) => {
     const f = e.target.files?.[0]
@@ -446,7 +452,7 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
   const accent = ACCENT[action.accent]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/70 px-3 pb-3 sm:p-4 animate-fadeUp" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-ink-950/70 px-3 pt-6 pb-3 sm:p-4 animate-fadeUp overflow-y-auto" onClick={onClose}>
       <div className="w-full max-w-md rounded-3xl bg-ink-800 border border-ink-700 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-3 border-b border-ink-700 flex items-center gap-2">
           <span className={`w-3 h-3 rounded-full ${accent.dot}`} />
@@ -532,15 +538,19 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
           {action.hasComponent && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold mb-1.5">Component</div>
-              {allComponents.length === 0 ? (
-                <div className="text-[11px] text-ink-500 italic">No components defined for this game.</div>
+              {availableComponents.length === 0 ? (
+                <div className="text-[11px] text-ink-500 italic">
+                  {action.filterTechComponents
+                    ? 'No tech-enabled components defined for this game. Toggle "Has tech" on a component in Admin.'
+                    : 'No components defined for this game.'}
+                </div>
               ) : (
                 <DropdownSelect
                   value={componentId}
                   onChange={setComponentId}
                   options={[
                     { value: '', label: '— None —' },
-                    ...allComponents.map(c => ({
+                    ...availableComponents.map(c => ({
                       value: c.id,
                       label: c.code ? `${c.code} · ${c.name}` : c.name
                     }))

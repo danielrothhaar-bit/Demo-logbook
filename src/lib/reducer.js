@@ -257,7 +257,11 @@ export function reducer(state, action) {
           benchmarkName: p.benchmarkName || '',
           dependsOn: Array.isArray(p.dependsOn) ? p.dependsOn : []
         })),
-        components: (g.components || []).map(c => ({ ...c, code: c.code || '' }))
+        components: (g.components || []).map(c => ({
+          ...c,
+          code: c.code || '',
+          hasTech: !!c.hasTech
+        }))
       }))
       next.sessions = (next.sessions || []).map(s => ({
         ...s,
@@ -350,7 +354,12 @@ export function reducer(state, action) {
     // Per-game components
     case 'ADD_COMPONENT':
       return updateGameField(state, action.gameId, 'components', list => [
-        ...list, { id: action.id || ('c_' + uid()), name: action.name.trim(), code: (action.code || '').trim() }
+        ...list, {
+          id: action.id || ('c_' + uid()),
+          name: action.name.trim(),
+          code: (action.code || '').trim(),
+          hasTech: !!action.hasTech
+        }
       ])
     case 'UPDATE_COMPONENT':
       return updateGameField(state, action.gameId, 'components', list =>
