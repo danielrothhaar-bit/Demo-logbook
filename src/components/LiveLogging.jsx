@@ -10,7 +10,7 @@ import ClickablePhoto from './ClickablePhoto.jsx'
 // (text / puzzle / component / photo) and saves a note with the matching
 // category tag. Replaces the old "type a note + quick tags" layout.
 const ACTIONS = [
-  { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false },
+  { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false, noPhoto: true },
   { id: 'game_change',   label: 'Game Change',   accent: 'blue',    tag: 'Game Change',   hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'tech_issue',    label: 'Tech Issue',    accent: 'yellow',  tag: 'Tech Issue',    hasText: true,  hasPuzzle: false, hasComponent: true, filterTechComponents: true },
   { id: 'note',          label: 'Note',          accent: 'grey',    tag: null,            hasText: true,  hasPuzzle: false, hasComponent: false, requireText: true },
@@ -41,6 +41,7 @@ export default function LiveLogging() {
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const audioStreamRef = useRef(null)
+  const teamPhotoInputRef = useRef(null)
   const sr = useSpeechRecognition()
 
   // Live transcript → draft (only meaningful in feedback discussion view).
@@ -168,6 +169,31 @@ export default function LiveLogging() {
 
   const totalPuzzles = (game?.puzzles || []).length
   const puzzleSolvedDisabled = totalPuzzles === 0 || solvedPuzzleIds.size >= totalPuzzles
+
+  // Snap a team photo and save it as a tagged note. The "Team Photo" tag is
+  // what the Trends → Team Photos gallery filters on, so this just feeds that
+  // collection directly without needing the rest of the action modal.
+  const handleTeamPhoto = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      dispatch({
+        type: 'ADD_NOTE',
+        sessionId: activeSession.id,
+        designerId: activeDesigner.id,
+        timestamp: currentSec,
+        categories: ['Team Photo'],
+        puzzleIds: [],
+        componentIds: [],
+        text: '[Team Photo]',
+        photoUrl: reader.result,
+        kind: 'note'
+      })
+    }
+    reader.readAsDataURL(f)
+    if (teamPhotoInputRef.current) teamPhotoInputRef.current.value = ''
+  }
 
   const ordered = [...activeSession.notes].sort((a, b) => b.timestamp - a.timestamp)
 
@@ -300,28 +326,49 @@ export default function LiveLogging() {
 
           {/* Feedback Discussion entry — only available when timer is paused/stopped */}
           {!activeSession.timerRunning && (
-            <button
-              onClick={() => {
-                setDiscussionMode(true)
-                setDraft('')
-                sr.reset()
-                startAudioRecording()
-                setTimeout(() => sr.start(), 50)
-              }}
-              className="w-full rounded-2xl bg-blue-500/15 border border-blue-400/50 active:bg-blue-500/25 py-4 px-4 text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-400/20 border border-blue-400/40 flex items-center justify-center text-blue-300">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
+            <>
+              <button
+                onClick={() => {
+                  setDiscussionMode(true)
+                  setDraft('')
+                  sr.reset()
+                  startAudioRecording()
+                  setTimeout(() => sr.start(), 50)
+                }}
+                className="w-full rounded-2xl bg-blue-500/15 border border-blue-400/50 active:bg-blue-500/25 py-4 px-4 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-400/20 border border-blue-400/40 flex items-center justify-center text-blue-300">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-blue-100">Start Feedback Discussion</div>
+                    <div className="text-[12px] text-blue-200/70">Long recording for player debrief — Q&amp;A and ratings auto-extracted in review.</div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-blue-100">Start Feedback Discussion</div>
-                  <div className="text-[12px] text-blue-200/70">Long recording for player debrief — Q&amp;A and ratings auto-extracted in review.</div>
-                </div>
-              </div>
-            </button>
+              </button>
+              <button
+                onClick={() => teamPhotoInputRef.current?.click()}
+                className="w-full rounded-2xl bg-ink-300 active:bg-ink-400 text-ink-950 py-4 px-4 font-bold text-base shadow-lg flex items-center justify-center gap-2"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="12" cy="12" r="3.5" />
+                  <path d="M16 5l-1.5-2h-5L8 5" />
+                </svg>
+                Team Photo
+              </button>
+              <input
+                ref={teamPhotoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleTeamPhoto}
+              />
+            </>
           )}
 
           {/* Action button grid — 4 rows × 2 columns */}
@@ -565,41 +612,43 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
             </div>
           )}
 
-          <div>
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              className={`w-full rounded-xl border py-2.5 px-3 flex items-center gap-3 ${
-                pendingPhoto ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'bg-ink-900 border-ink-700 text-ink-300 active:bg-ink-700'
-              }`}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <circle cx="12" cy="12" r="3.5" />
-                <path d="M16 5l-1.5-2h-5L8 5" />
-              </svg>
-              <span className="text-sm font-medium flex-1 text-left">
-                {pendingPhoto ? 'Photo attached' : 'Attach photo (optional)'}
-              </span>
+          {!action.noPhoto && (
+            <div>
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className={`w-full rounded-xl border py-2.5 px-3 flex items-center gap-3 ${
+                  pendingPhoto ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'bg-ink-900 border-ink-700 text-ink-300 active:bg-ink-700'
+                }`}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="12" cy="12" r="3.5" />
+                  <path d="M16 5l-1.5-2h-5L8 5" />
+                </svg>
+                <span className="text-sm font-medium flex-1 text-left">
+                  {pendingPhoto ? 'Photo attached' : 'Attach photo (optional)'}
+                </span>
+                {pendingPhoto && (
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setPendingPhoto(null) }}
+                    className="text-xs text-rose-300 active:text-rose-400 px-2"
+                    role="button"
+                  >Remove</span>
+                )}
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handlePhoto}
+              />
               {pendingPhoto && (
-                <span
-                  onClick={(e) => { e.stopPropagation(); setPendingPhoto(null) }}
-                  className="text-xs text-rose-300 active:text-rose-400 px-2"
-                  role="button"
-                >Remove</span>
+                <ClickablePhoto src={pendingPhoto} className="mt-2 w-full h-32 rounded-xl object-cover" />
               )}
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handlePhoto}
-            />
-            {pendingPhoto && (
-              <ClickablePhoto src={pendingPhoto} className="mt-2 w-full h-32 rounded-xl object-cover" />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 p-3 border-t border-ink-700">

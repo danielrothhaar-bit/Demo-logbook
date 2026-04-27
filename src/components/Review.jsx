@@ -14,6 +14,11 @@ const TABS = [
 ]
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
+const yesterdayISO = () => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
 
 function csvCell(v) {
   const s = v == null ? '' : String(v)
@@ -94,8 +99,9 @@ function SessionPicker() {
   const { state, dispatch, gameName, designerById, gameById } = useStore()
 
   const [filterGameIds, setFilterGameIds] = useState([])
-  const [dateFrom, setDateFrom] = useState(todayISO())
-  const [dateTo,   setDateTo]   = useState(todayISO())
+  // Default to yesterday — designers usually review the previous day's runs.
+  const [dateFrom, setDateFrom] = useState(yesterdayISO())
+  const [dateTo,   setDateTo]   = useState(yesterdayISO())
   const [filterDesignerIds, setFilterDesignerIds] = useState([])
 
   const toggle = (arr, setter, v) =>
@@ -120,6 +126,7 @@ function SessionPicker() {
   const setRange = (days) => {
     const today = todayISO()
     if (days === 0) { setDateFrom(today); setDateTo(today); return }
+    if (days === -1) { const y = yesterdayISO(); setDateFrom(y); setDateTo(y); return }
     if (days === Infinity) { setDateFrom(''); setDateTo(''); return }
     const d = new Date()
     d.setDate(d.getDate() - days)
@@ -128,19 +135,25 @@ function SessionPicker() {
   }
 
   const isToday = dateFrom === todayISO() && dateTo === todayISO()
+  const isYesterday = dateFrom === yesterdayISO() && dateTo === yesterdayISO()
 
   return (
     <div className="px-4 pt-3 space-y-3">
       {/* Quick range chips */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
         {[
-          { label: 'Today', test: () => isToday, days: 0 },
-          { label: 'Last 7d', days: 7 },
-          { label: 'Last 30d', days: 30 },
-          { label: 'All', days: Infinity }
-        ].map(({ label, days }) => (
+          { label: 'Yesterday', active: isYesterday, days: -1 },
+          { label: 'Today', active: isToday, days: 0 },
+          { label: 'Last 7d', active: false, days: 7 },
+          { label: 'Last 30d', active: false, days: 30 },
+          { label: 'All', active: !dateFrom && !dateTo, days: Infinity }
+        ].map(({ label, days, active }) => (
           <button key={label} onClick={() => setRange(days)}
-            className="px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700">
+            className={`px-3 py-2 rounded-full text-sm font-medium border whitespace-nowrap ${
+              active
+                ? 'bg-accent-500 border-accent-500 text-ink-50'
+                : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
+            }`}>
             {label}
           </button>
         ))}
@@ -152,7 +165,7 @@ function SessionPicker() {
           <span className="text-xs text-ink-400">
             {(filterGameIds.length + filterDesignerIds.length > 0)
               ? `${filterGameIds.length + filterDesignerIds.length} active`
-              : (isToday ? 'today' : 'custom')}
+              : (isYesterday ? 'yesterday' : isToday ? 'today' : 'custom')}
           </span>
         </summary>
         <div className="px-4 pb-4 space-y-3">
@@ -208,7 +221,7 @@ function SessionPicker() {
 
       <div className="text-xs text-ink-400 px-1">
         {filtered.length} of {state.sessions.length} demos
-        {isToday && filtered.length === 0 && state.sessions.length > 0 &&
+        {(isToday || isYesterday) && filtered.length === 0 && state.sessions.length > 0 &&
           <> — <button onClick={() => setRange(Infinity)} className="text-accent-400 active:text-accent-500">show all</button></>}
       </div>
 
