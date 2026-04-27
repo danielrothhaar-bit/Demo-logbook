@@ -44,10 +44,8 @@ export default function NoteEditor({ note, sessionId, onClose }) {
   }, [isFeedback, note.categories])
 
   const reDetect = () => {
-    const detected = analyzeNoteText(text, { categories: availableCats, game })
+    const detected = analyzeNoteText(text, { categories: availableCats })
     setCategories(prev => [...new Set([...prev, ...detected.categories])])
-    setPuzzleIds(prev => [...new Set([...prev, ...detected.puzzleIds])])
-    setComponentIds(prev => [...new Set([...prev, ...detected.componentIds])])
   }
 
   const save = () => {
