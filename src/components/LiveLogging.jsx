@@ -1,44 +1,60 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, fmtTime, fmtClockTime, DEMO_TARGET_SEC } from '../store.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
-import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
+// Action button grid — each button opens a modal with the relevant fields
+// (text / puzzle / component / photo) and saves a note with the matching
+// category tag. Replaces the old "type a note + quick tags" layout.
+const ACTIONS = [
+  { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false },
+  { id: 'game_change',   label: 'Game Change',   accent: 'blue',    tag: 'Game Change',   hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'tech_issue',    label: 'Tech Issue',    accent: 'orange',  tag: 'Tech Issue',    hasText: false, hasPuzzle: true, hasComponent: true },
+  { id: 'note',          label: 'Note',          accent: 'grey',    tag: null,            hasText: true,  hasPuzzle: false, hasComponent: false, requireText: true },
+  { id: 'wow',           label: 'Wow',           accent: 'emerald', tag: 'Wow Moment',    hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'frustration',   label: 'Frustration',   accent: 'rose',    tag: 'Frustration',   hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'hint',          label: 'Hint',          accent: 'violet',  tag: 'Hint',          hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'clue',          label: 'Clue',          accent: 'orange',  tag: 'Clue',          hasText: true,  hasPuzzle: true, hasComponent: false }
+]
+
+const ACCENT = {
+  emerald: { btn: 'bg-emerald-500 active:bg-emerald-600 text-ink-950', dot: 'bg-emerald-400' },
+  blue:    { btn: 'bg-blue-500 active:bg-blue-600 text-white',          dot: 'bg-blue-400' },
+  orange:  { btn: 'bg-orange-500 active:bg-orange-600 text-white',      dot: 'bg-orange-400' },
+  grey:    { btn: 'bg-ink-600 active:bg-ink-500 text-ink-100',          dot: 'bg-ink-400' },
+  rose:    { btn: 'bg-rose-600 active:bg-rose-700 text-white',          dot: 'bg-rose-400' },
+  violet:  { btn: 'bg-violet-400 active:bg-violet-500 text-ink-950',    dot: 'bg-violet-400' }
+}
+
 export default function LiveLogging() {
   const { state, dispatch, activeSession, activeDesigner, gameName, gameById } = useStore()
-  const [draft, setDraft] = useState('')
-  const [pickedCategories, setPickedCategories] = useState([])
   const [discussionMode, setDiscussionMode] = useState(false)
-  const photoInputRef = useRef(null)
-  const [pendingPhoto, setPendingPhoto] = useState(null)
   const [editNote, setEditNote] = useState(null)
+  const [pendingAction, setPendingAction] = useState(null)
   const [recordingAudio, setRecordingAudio] = useState(false)
-  const [showPuzzlePicker, setShowPuzzlePicker] = useState(false)
+  const [draft, setDraft] = useState('')
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const audioStreamRef = useRef(null)
-
-  // Single speech-recognition instance lifted up so Save can also stop it
   const sr = useSpeechRecognition()
 
-  // Sync live transcript into draft (so the user sees what was heard)
+  // Live transcript → draft (only meaningful in feedback discussion view).
   useEffect(() => {
-    if (sr.isListening) {
+    if (sr.isListening && discussionMode) {
       const live = (sr.finalTranscript + ' ' + sr.interim).trim()
       if (live) setDraft(live)
     }
-  }, [sr.isListening, sr.finalTranscript, sr.interim])
+  }, [sr.isListening, sr.finalTranscript, sr.interim, discussionMode])
 
-  if (!activeSession) {
-    return <LiveListing />
-  }
-
+  if (!activeSession) return <LiveListing />
   if (!activeDesigner) {
     return <DesignerPicker designers={state.designers} onPick={(id) => dispatch({ type: 'SET_ACTIVE_DESIGNER', id })} />
   }
+
+  const game = gameById(activeSession.gameId)
 
   const currentSec = activeSession.timerRunning && activeSession.timerStartedAt
     ? Math.floor((Date.now() - activeSession.timerStartedAt) / 1000)
@@ -48,43 +64,21 @@ export default function LiveLogging() {
   const displaySec = isOvertime ? currentSec - DEMO_TARGET_SEC : DEMO_TARGET_SEC - currentSec
 
   const adjustTimer = (deltaSec) => {
-    // deltaSec > 0: give the demo more time. < 0: take time away.
     if (!deltaSec) return
     dispatch({ type: 'TIMER_ADJUST', sessionId: activeSession.id, delta: deltaSec })
   }
 
-  const togglePick = (c) => {
-    setPickedCategories(prev =>
-      prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
-    )
-  }
-
-  const commit = (text, opts = {}) => {
-    const trimmed = (text || '').trim()
-    if (!trimmed && !opts.audioUrl) return
-    const game = gameById(activeSession.gameId)
-    const auto = !trimmed || opts.skipAutoTag ? [] : autoTagsFromText(trimmed, state.categories)
-    const merged = [...new Set([...(opts.categories ?? pickedCategories), ...auto])]
-    const puzzleIds    = !trimmed || opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.puzzles)
-    const componentIds = !trimmed || opts.skipAutoTag ? [] : matchNamedItems(trimmed, game?.components)
-    dispatch({
-      type: 'ADD_NOTE',
-      sessionId: activeSession.id,
-      designerId: activeDesigner.id,
-      timestamp: currentSec,
-      categories: merged,
-      puzzleIds,
-      componentIds,
-      text: trimmed,
-      photoUrl: opts.photoUrl ?? pendingPhoto,
-      audioUrl: opts.audioUrl ?? null,
-      kind: opts.kind || 'note'
-    })
-    setDraft('')
-    setPickedCategories([])
-    setPendingPhoto(null)
-    if (photoInputRef.current) photoInputRef.current.value = ''
-  }
+  // Already-solved puzzle ids — used to filter the Puzzle Solved picker so a
+  // puzzle can only be marked solved once per session.
+  const solvedPuzzleIds = useMemo(() => {
+    const ids = new Set()
+    for (const n of activeSession.notes) {
+      if ((n.categories || []).includes('Puzzle Solved')) {
+        for (const pid of (n.puzzleIds || [])) ids.add(pid)
+      }
+    }
+    return ids
+  }, [activeSession.notes])
 
   // ---- Audio recording (feedback discussion only) ----
   const startAudioRecording = async () => {
@@ -105,7 +99,6 @@ export default function LiveLogging() {
       setRecordingAudio(true)
     } catch (err) {
       console.warn('Audio recording unavailable:', err)
-      // Continue without audio — the discussion still works via speech recognition.
     }
   }
 
@@ -137,85 +130,37 @@ export default function LiveLogging() {
     try { recorder.stop() } catch { cleanup(); resolve(null) }
   })
 
-  // Build mic handler — Save and tap-mic share commit logic
-  const stopAndCommit = () => {
-    // Stop the recognizer; finalTranscript is already in draft via the effect
-    if (sr.isListening) sr.stop()
-    const text = (sr.finalTranscript || draft).trim()
-    if (text) commit(text)
-    sr.reset()
-  }
-
-  const onMicTap = () => {
-    if (!sr.supported) return
-    if (sr.needsTapAgain) { sr.resume(); return }
-    if (sr.isListening) {
-      stopAndCommit()
-    } else {
-      sr.start()
-    }
-  }
-
-  const submitTyped = (e) => {
-    e?.preventDefault?.()
-    // If mic is hot, stop it first so we don't keep listening after save
-    if (sr.isListening) sr.stop()
-    const text = (sr.finalTranscript || draft).trim()
-    if (!text) return
-    commit(text)
-    sr.reset()
-  }
-
-  const handlePhoto = (e) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    const reader = new FileReader()
-    reader.onload = () => setPendingPhoto(reader.result)
-    reader.readAsDataURL(f)
-  }
-
-  const quickLogTag = (c) => {
-    dispatch({
-      type: 'ADD_NOTE',
-      sessionId: activeSession.id,
-      designerId: activeDesigner.id,
-      timestamp: currentSec,
-      categories: [c],
-      text: `[${c}]`
-    })
-  }
-
-  // Puzzles already marked solved this demo — used to filter the picker so
-  // a puzzle can only be logged "solved" once per session.
-  const game = gameById(activeSession.gameId)
-  const solvedPuzzleIds = useMemo(() => {
-    const ids = new Set()
-    for (const n of activeSession.notes) {
-      if ((n.categories || []).includes('Puzzle Solved')) {
-        for (const pid of (n.puzzleIds || [])) ids.add(pid)
+  // Save the note from a generic action modal.
+  const handleActionConfirm = (action, payload) => {
+    let text = (payload.text || '').trim()
+    if (!text) {
+      if (action.id === 'puzzle_solved') {
+        const p = (game?.puzzles || []).find(x => x.id === payload.puzzleIds[0])
+        text = p ? `${p.name} Puzzle solved` : '[Puzzle Solved]'
+      } else if (action.tag) {
+        text = `[${action.tag}]`
+      } else {
+        text = payload.photoUrl ? '(photo)' : '(note)'
       }
     }
-    return ids
-  }, [activeSession.notes])
-  const availablePuzzles = (game?.puzzles || []).filter(p => !solvedPuzzleIds.has(p.id))
-  const totalPuzzles = (game?.puzzles || []).length
-
-  const logPuzzleSolved = (puzzle) => {
     dispatch({
       type: 'ADD_NOTE',
       sessionId: activeSession.id,
       designerId: activeDesigner.id,
       timestamp: currentSec,
-      categories: ['Puzzle Solved'],
-      puzzleIds: [puzzle.id],
-      componentIds: [],
-      text: `${puzzle.name} Puzzle solved`,
+      categories: action.tag ? [action.tag] : [],
+      puzzleIds: payload.puzzleIds || [],
+      componentIds: payload.componentIds || [],
+      text,
+      photoUrl: payload.photoUrl || null,
       kind: 'note'
     })
-    setShowPuzzlePicker(false)
+    setPendingAction(null)
   }
 
-  // Render order: discussion mode replaces the normal logging UI
+  const totalPuzzles = (game?.puzzles || []).length
+  const puzzleSolvedDisabled = totalPuzzles === 0 || solvedPuzzleIds.size >= totalPuzzles
+
   const ordered = [...activeSession.notes].sort((a, b) => b.timestamp - a.timestamp)
 
   return (
@@ -263,14 +208,21 @@ export default function LiveLogging() {
             const text = (sr.finalTranscript || draft).trim()
             const audioUrl = await stopAudioRecording({ keep: true })
             if (text || audioUrl) {
-              commit(text, {
+              dispatch({
+                type: 'ADD_NOTE',
+                sessionId: activeSession.id,
+                designerId: activeDesigner.id,
+                timestamp: currentSec,
                 categories: ['Feedback Discussion'],
-                kind: 'feedback',
-                skipAutoTag: true,
-                audioUrl
+                puzzleIds: [],
+                componentIds: [],
+                text,
+                audioUrl,
+                kind: 'feedback'
               })
             }
             sr.reset()
+            setDraft('')
             setDiscussionMode(false)
           }}
         />
@@ -336,120 +288,53 @@ export default function LiveLogging() {
             </div>
           </div>
 
-          {/* Category quick-tags */}
-          <div>
-            <div className="flex items-center mb-1.5 px-1">
-              <div className="text-xs uppercase tracking-wider text-ink-400">Quick tags</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {state.categories.filter(c => c !== 'Feedback Discussion').map(c => {
-                const picked = pickedCategories.includes(c)
-                return (
-                  <button
-                    key={c}
-                    onClick={() => togglePick(c)}
-                    onDoubleClick={() => quickLogTag(c)}
-                    className={`px-3 py-2.5 rounded-full text-sm font-medium border transition-colors ${
-                      picked ? 'bg-accent-500 border-accent-500 text-ink-50'
-                             : 'bg-ink-800 border-ink-700 text-ink-100 active:bg-ink-700'
-                    }`}
-                  >{c}</button>
-                )
-              })}
-            </div>
-            <div className="text-[11px] text-ink-500 mt-1 px-1">
-              Tap to attach to next note. Double-tap to log instantly.
-            </div>
-          </div>
-
-          {/* Voice + draft */}
-          <div className="rounded-3xl bg-ink-900 border border-ink-800 p-4">
-            <MicButton sr={{ ...sr, onTap: onMicTap }} />
-
-            <form onSubmit={submitTyped} className="mt-4 flex gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Type a note…"
-                className="flex-1 bg-ink-800 border border-ink-700 rounded-xl px-3 py-3 outline-none focus:border-accent-500"
-              />
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className={`w-12 h-12 rounded-xl border flex items-center justify-center ${
-                  pendingPhoto ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-ink-800 border-ink-700 text-ink-300 active:bg-ink-700'
-                }`}
-                aria-label="Attach photo"
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="12" cy="12" r="3.5" /><path d="M16 5l-1.5-2h-5L8 5" />
-                </svg>
-              </button>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handlePhoto}
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() && !sr.finalTranscript}
-                className="px-4 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-semibold disabled:opacity-40"
-              >Save</button>
-            </form>
-            {pendingPhoto && (
-              <div className="mt-2 flex items-center gap-2">
-                <ClickablePhoto src={pendingPhoto} className="w-12 h-12 rounded object-cover" />
-                <span className="text-xs text-ink-400 flex-1">Photo will attach to next saved note</span>
-                <button onClick={() => setPendingPhoto(null)} className="text-xs text-rose-300 active:text-rose-400">Remove</button>
-              </div>
-            )}
-          </div>
-
-          {/* Puzzle Solved — opens picker so the designer can pick exactly which puzzle */}
-          {totalPuzzles > 0 && (
+          {/* Feedback Discussion entry — only available when timer is paused/stopped */}
+          {!activeSession.timerRunning && (
             <button
-              onClick={() => setShowPuzzlePicker(true)}
-              disabled={availablePuzzles.length === 0}
-              className="w-full rounded-2xl bg-yellow-400 active:bg-yellow-500 disabled:bg-yellow-400/30 disabled:text-yellow-100/60 text-ink-950 py-4 px-4 font-bold text-base shadow-lg shadow-yellow-400/20 flex items-center justify-center gap-2"
+              onClick={() => {
+                setDiscussionMode(true)
+                setDraft('')
+                sr.reset()
+                startAudioRecording()
+                setTimeout(() => sr.start(), 50)
+              }}
+              className="w-full rounded-2xl bg-blue-500/15 border border-blue-400/50 active:bg-blue-500/25 py-4 px-4 text-left"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              Puzzle Solved
-              {availablePuzzles.length === 0 && (
-                <span className="text-[11px] font-medium opacity-80 ml-1">all {totalPuzzles} solved</span>
-              )}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-400/20 border border-blue-400/40 flex items-center justify-center text-blue-300">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-blue-100">Start Feedback Discussion</div>
+                  <div className="text-[12px] text-blue-200/70">Long recording for player debrief — Q&amp;A and ratings auto-extracted in review.</div>
+                </div>
+              </div>
             </button>
           )}
 
-          {/* Feedback Discussion entry */}
-          <button
-            onClick={() => {
-              setDiscussionMode(true)
-              setDraft('')
-              sr.reset()
-              startAudioRecording()
-              setTimeout(() => sr.start(), 50)
-            }}
-            className="w-full rounded-2xl bg-blue-500/15 border border-blue-400/50 active:bg-blue-500/25 py-4 px-4 text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-400/20 border border-blue-400/40 flex items-center justify-center text-blue-300">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-blue-100">Start Feedback Discussion</div>
-                <div className="text-[12px] text-blue-200/70">Long recording for player debrief — Q&A and ratings auto-extracted in review.</div>
-              </div>
-            </div>
-          </button>
+          {/* Action button grid — 4 rows × 2 columns */}
+          <div className="grid grid-cols-2 gap-2">
+            {ACTIONS.map(action => {
+              const disabled = action.id === 'puzzle_solved' && puzzleSolvedDisabled
+              return (
+                <button
+                  key={action.id}
+                  onClick={() => setPendingAction(action)}
+                  disabled={disabled}
+                  className={`rounded-2xl py-5 px-3 font-bold text-base shadow-lg disabled:opacity-40 ${ACCENT[action.accent].btn}`}
+                >
+                  {action.label}
+                  {action.id === 'puzzle_solved' && puzzleSolvedDisabled && totalPuzzles > 0 && (
+                    <span className="block text-[10px] font-medium opacity-80 mt-0.5">all {totalPuzzles} solved</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
 
-          {/* Finish Demo — finalizes and moves to review */}
+          {/* Finish Demo */}
           <button
             onClick={() => {
               if (confirm('Finish this demo and move to review?')) {
@@ -485,15 +370,11 @@ export default function LiveLogging() {
           </div>
           {ordered.length === 0 ? (
             <div className="text-ink-400 text-sm text-center py-6">
-              No notes yet. Tap the mic, or use a quick tag.
+              No notes yet. Tap a logging button above.
             </div>
           ) : (
             ordered.map(n => (
-              <NoteCard
-                key={n.id}
-                note={n}
-                onEdit={() => setEditNote(n)}
-              />
+              <NoteCard key={n.id} note={n} onEdit={() => setEditNote(n)} />
             ))
           )}
         </div>
@@ -507,88 +388,236 @@ export default function LiveLogging() {
         />
       )}
 
-      {showPuzzlePicker && (
-        <PuzzlePickerModal
-          puzzles={availablePuzzles}
-          totalPuzzles={totalPuzzles}
-          onPick={logPuzzleSolved}
-          onClose={() => setShowPuzzlePicker(false)}
+      {pendingAction && (
+        <ActionLogModal
+          action={pendingAction}
+          game={game}
+          alreadySolvedPuzzleIds={solvedPuzzleIds}
+          onClose={() => setPendingAction(null)}
+          onConfirm={(payload) => handleActionConfirm(pendingAction, payload)}
         />
       )}
     </div>
   )
 }
 
-function PuzzlePickerModal({ puzzles, totalPuzzles, onPick, onClose }) {
-  const [pickedId, setPickedId] = useState(null)
-  const picked = puzzles.find(p => p.id === pickedId) || null
-  const solvedCount = totalPuzzles - puzzles.length
+// ============================================================================
+// ActionLogModal — shared modal for all 8 action buttons. Fields shown depend
+// on the `action` config; on Confirm, calls onConfirm with a payload of
+// { text, puzzleIds, componentIds, photoUrl } that the parent persists.
+// ============================================================================
+function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfirm }) {
+  const [text, setText] = useState('')
+  const [puzzleId, setPuzzleId] = useState('')
+  const [componentId, setComponentId] = useState('')
+  const [pendingPhoto, setPendingPhoto] = useState(null)
+  const photoInputRef = useRef(null)
+
+  const allPuzzles = game?.puzzles || []
+  const availablePuzzles = action.filterSolved
+    ? allPuzzles.filter(p => !alreadySolvedPuzzleIds.has(p.id))
+    : allPuzzles
+  const allComponents = game?.components || []
+
+  const handlePhoto = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    const reader = new FileReader()
+    reader.onload = () => setPendingPhoto(reader.result)
+    reader.readAsDataURL(f)
+  }
+
+  const canSave = (() => {
+    if (action.requirePuzzle && !puzzleId) return false
+    if (action.requireText && !text.trim() && !pendingPhoto) return false
+    return true
+  })()
+
+  const submit = () => {
+    if (!canSave) return
+    onConfirm({
+      text: text.trim(),
+      puzzleIds: action.hasPuzzle && puzzleId ? [puzzleId] : [],
+      componentIds: action.hasComponent && componentId ? [componentId] : [],
+      photoUrl: pendingPhoto
+    })
+  }
+
+  const accent = ACCENT[action.accent]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/70 px-3 pb-3 sm:p-4 animate-fadeUp">
-      <div className="w-full max-w-md rounded-3xl bg-ink-800 border border-yellow-400/40 overflow-hidden">
-        <div className="px-4 pt-4 pb-3 border-b border-ink-700">
-          <div className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold">Mark a puzzle solved</div>
-          <div className="text-sm text-ink-300 mt-0.5">
-            {solvedCount > 0
-              ? `${solvedCount} of ${totalPuzzles} already solved this demo.`
-              : `Pick the puzzle the team just cracked.`}
-          </div>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/70 px-3 pb-3 sm:p-4 animate-fadeUp" onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl bg-ink-800 border border-ink-700 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 pt-4 pb-3 border-b border-ink-700 flex items-center gap-2">
+          <span className={`w-3 h-3 rounded-full ${accent.dot}`} />
+          <div className="text-sm font-semibold text-ink-100 flex-1">{action.label}</div>
+          <button onClick={onClose} className="text-ink-400 active:text-ink-200 text-2xl leading-none">×</button>
         </div>
 
-        <div className="max-h-[50vh] overflow-y-auto p-3 space-y-1.5">
-          {puzzles.length === 0 ? (
-            <div className="text-sm text-ink-400 text-center py-6">
-              All puzzles already marked solved this demo.
-            </div>
-          ) : puzzles.map(p => {
-            const active = p.id === pickedId
-            return (
-              <button
-                key={p.id}
-                onClick={() => setPickedId(p.id)}
-                className={`w-full text-left rounded-xl border p-3 flex items-center gap-3 ${
-                  active
-                    ? 'bg-yellow-400/15 border-yellow-400'
-                    : 'bg-ink-900 border-ink-700 active:bg-ink-700'
-                }`}
-              >
-                <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                  active ? 'border-yellow-400 bg-yellow-400' : 'border-ink-500'
-                }`}>
-                  {active && (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b0f17" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {p.code && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">
-                        {p.code}
-                      </span>
-                    )}
-                    <span className="font-semibold truncate">{p.name}</span>
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          {action.hasText && (
+            <textarea
+              autoFocus
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Type a note…"
+              rows={3}
+              className="w-full bg-ink-900 border border-ink-700 rounded-xl px-3 py-2 outline-none focus:border-accent-500 resize-none text-sm"
+            />
+          )}
+
+          {action.hasPuzzle && (
+            action.requirePuzzle ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold mb-1.5">Puzzle</div>
+                {availablePuzzles.length === 0 ? (
+                  <div className="text-sm text-ink-400 text-center py-4">All puzzles already marked solved this demo.</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {availablePuzzles.map(p => {
+                      const active = puzzleId === p.id
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setPuzzleId(p.id)}
+                          className={`w-full text-left rounded-xl border p-3 flex items-center gap-3 ${
+                            active ? 'bg-emerald-500/15 border-emerald-400' : 'bg-ink-900 border-ink-700 active:bg-ink-700'
+                          }`}
+                        >
+                          <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            active ? 'bg-emerald-400 border-emerald-400' : 'border-ink-500'
+                          }`}>
+                            {active && (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b0f17" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {p.code && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
+                              )}
+                              <span className="font-semibold truncate">{p.name}</span>
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
-                </div>
-              </button>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold mb-1.5">Puzzle</div>
+                {allPuzzles.length === 0 ? (
+                  <div className="text-[11px] text-ink-500 italic">No puzzles defined for this game.</div>
+                ) : (
+                  <DropdownSelect
+                    value={puzzleId}
+                    onChange={setPuzzleId}
+                    options={[
+                      { value: '', label: '— None —' },
+                      ...allPuzzles.map(p => ({
+                        value: p.id,
+                        label: p.code ? `${p.code} · ${p.name}` : p.name
+                      }))
+                    ]}
+                  />
+                )}
+              </div>
             )
-          })}
+          )}
+
+          {action.hasComponent && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold mb-1.5">Component</div>
+              {allComponents.length === 0 ? (
+                <div className="text-[11px] text-ink-500 italic">No components defined for this game.</div>
+              ) : (
+                <DropdownSelect
+                  value={componentId}
+                  onChange={setComponentId}
+                  options={[
+                    { value: '', label: '— None —' },
+                    ...allComponents.map(c => ({
+                      value: c.id,
+                      label: c.code ? `${c.code} · ${c.name}` : c.name
+                    }))
+                  ]}
+                />
+              )}
+            </div>
+          )}
+
+          <div>
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              className={`w-full rounded-xl border py-2.5 px-3 flex items-center gap-3 ${
+                pendingPhoto ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'bg-ink-900 border-ink-700 text-ink-300 active:bg-ink-700'
+              }`}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <circle cx="12" cy="12" r="3.5" />
+                <path d="M16 5l-1.5-2h-5L8 5" />
+              </svg>
+              <span className="text-sm font-medium flex-1 text-left">
+                {pendingPhoto ? 'Photo attached' : 'Attach photo (optional)'}
+              </span>
+              {pendingPhoto && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); setPendingPhoto(null) }}
+                  className="text-xs text-rose-300 active:text-rose-400 px-2"
+                  role="button"
+                >Remove</span>
+              )}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhoto}
+            />
+            {pendingPhoto && (
+              <ClickablePhoto src={pendingPhoto} className="mt-2 w-full h-32 rounded-xl object-cover" />
+            )}
+          </div>
         </div>
 
         <div className="flex gap-2 p-3 border-t border-ink-700">
           <button onClick={onClose}
             className="flex-1 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
-          <button
-            onClick={() => picked && onPick(picked)}
-            disabled={!picked}
-            className="flex-[2] py-3 rounded-xl bg-yellow-400 active:bg-yellow-500 disabled:opacity-40 text-ink-950 font-bold"
-          >
-            Confirm Solve
-          </button>
+          <button onClick={submit} disabled={!canSave}
+            className={`flex-[2] py-3 rounded-xl font-bold disabled:opacity-40 ${accent.btn}`}
+          >Confirm</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function DropdownSelect({ value, onChange, options }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none bg-ink-900 border border-ink-700 rounded-xl pl-3 pr-9 py-2.5 outline-none focus:border-accent-500 text-sm font-medium text-ink-100"
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-400"
+        width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
     </div>
   )
 }
@@ -648,7 +677,7 @@ function FeedbackDiscussionPanel({ sr, draft, setDraft, displaySec, isOvertime, 
           className="flex-1 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
         <button onClick={onEnd}
           className="flex-[2] py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-ink-950 font-bold">
-          End & Save Discussion
+          End &amp; Save Discussion
         </button>
       </div>
     </div>
