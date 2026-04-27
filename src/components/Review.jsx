@@ -879,18 +879,22 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
           <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
 
           {/* Benchmark vertical guide lines — drawn under the dots so dots stay legible.
-              Hover shows the puzzle and target time; no inline label to keep the timeline clean. */}
+              Always-visible chip above the line shows the benchmark name (or time fallback). */}
           {benchmarks.map(p => {
             const pct = span > 0 ? Math.min(100, Math.max(0, (p.benchSec / span) * 100)) : 0
+            const label = p.benchmarkName || fmtCountdown(p.benchSec)
             return (
               <div
                 key={`bench-${p.id}`}
-                className="absolute top-0 bottom-0 -translate-x-1/2 group"
+                className="absolute top-0 bottom-0 -translate-x-1/2"
                 style={{ left: `${pct}%` }}
               >
                 <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 border-l border-dashed border-yellow-300/70" />
-                <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-ink-900 border border-yellow-500/40 text-[10px] text-yellow-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
-                  Benchmark · {p.name} · {fmtCountdown(p.benchSec)}
+                <div
+                  className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full px-1.5 py-0.5 rounded bg-yellow-500/15 border border-yellow-500/40 text-[10px] font-semibold text-yellow-200 whitespace-nowrap shadow-sm"
+                  title={`Benchmark · ${p.name} · ${fmtCountdown(p.benchSec)}`}
+                >
+                  ⏱ {label}
                 </div>
               </div>
             )

@@ -233,6 +233,7 @@ export function analyzePuzzles(notes, game) {
       name: p.name,
       code: p.code || '',
       benchmark: p.benchmark || '',
+      benchmarkName: p.benchmarkName || '',
       status,
       firstTouchTs,
       solvedTs,
@@ -644,6 +645,7 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
       name: p.name,
       code: p.code || '',
       benchmark: p.benchmark || '',
+      benchmarkName: p.benchmarkName || '',
       times: [],
       solvedTimestamps: [],
       demosSolved: new Set()
@@ -687,6 +689,7 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
       name: s.name,
       code: s.code,
       benchmark: s.benchmark,
+      benchmarkName: s.benchmarkName,
       solveCount: count,
       solvedDemoCount: tsCount,
       avgSolveTime: avg,

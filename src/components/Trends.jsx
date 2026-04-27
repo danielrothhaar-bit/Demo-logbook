@@ -530,6 +530,11 @@ function BenchmarksSubsection({ perPuzzle }) {
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
               )}
               <span className="font-semibold text-sm text-ink-100 truncate flex-1">{p.name}</span>
+              {p.benchmarkName && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/40 font-medium">
+                  ⏱ {p.benchmarkName}
+                </span>
+              )}
               <span className="font-mono tabular-nums text-[11px] text-yellow-300">target {fmtCountdown(p.benchmarkSec)}</span>
             </div>
             <div className="text-[11px] mt-1 font-mono tabular-nums flex items-center gap-2 flex-wrap">

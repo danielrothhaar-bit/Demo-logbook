@@ -352,12 +352,16 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
   const [name, setName] = useState(item.name)
   const [code, setCode] = useState(item.code || '')
   const [benchmark, setBenchmark] = useState(item.benchmark || '')
+  const [benchmarkName, setBenchmarkName] = useState(item.benchmarkName || '')
   const isPuzzle = kind === 'puzzle'
   const save = () => {
     const v = name.trim()
     if (!v) return
     const patch = { name: v, code: code.trim() }
-    if (isPuzzle) patch.benchmark = benchmark.trim()
+    if (isPuzzle) {
+      patch.benchmark = benchmark.trim()
+      patch.benchmarkName = benchmarkName.trim()
+    }
     onSave(patch)
     setEditing(false)
   }
@@ -372,16 +376,28 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
             className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500" />
         </div>
         {isPuzzle && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Benchmark</span>
-            <input
-              value={benchmark}
-              onChange={(e) => setBenchmark(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-              placeholder="e.g. 45:00 (optional)"
-              className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm font-mono focus:border-accent-500"
-            />
-          </div>
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Benchmark</span>
+              <input
+                value={benchmark}
+                onChange={(e) => setBenchmark(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                placeholder="e.g. 45:00 (optional)"
+                className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm font-mono focus:border-accent-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Bench label</span>
+              <input
+                value={benchmarkName}
+                onChange={(e) => setBenchmarkName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                placeholder="e.g. Halfway, Locker, Final"
+                className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500"
+              />
+            </div>
+          </>
         )}
         <div className="flex items-center justify-end gap-1">
           <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2 py-1">Cancel</button>
@@ -404,8 +420,8 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
       <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
       {isPuzzle && item.benchmark && (
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/40 flex-shrink-0"
-              title={`Benchmark target: ${item.benchmark}`}>
-          ⏱ {item.benchmark}
+              title={`Benchmark${item.benchmarkName ? ` "${item.benchmarkName}"` : ''}: ${item.benchmark}`}>
+          ⏱ {item.benchmarkName ? `${item.benchmarkName} · ` : ''}{item.benchmark}
         </span>
       )}
       <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2 flex-shrink-0">Edit</button>
