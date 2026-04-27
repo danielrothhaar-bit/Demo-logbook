@@ -61,13 +61,24 @@ export default function NoteEditor({ note, sessionId, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-ink-950/85 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-ink-800 border border-ink-700 rounded-3xl p-5 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold">Edit note</h3>
-          <button onClick={onClose} className="text-ink-400 active:text-ink-200 text-2xl leading-none">×</button>
+      <div className="w-full max-w-md bg-ink-800 border border-ink-700 rounded-3xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+
+        {/* Top action bar — sticky so it stays reachable while scrolling long forms */}
+        <div className="sticky top-0 z-20 bg-ink-800 border-b border-ink-700 px-3 py-2.5 flex items-center gap-2 rounded-t-3xl">
+          <button onClick={remove}
+            className="px-4 py-2.5 rounded-xl bg-rose-600 active:bg-rose-700 text-white font-semibold">
+            Delete
+          </button>
+          <div className="flex-1" />
+          <button onClick={onClose}
+            className="px-4 py-2.5 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
+          <button onClick={save} disabled={!tsValid || !text.trim()}
+            className="px-5 py-2.5 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-40 text-ink-950 font-bold">Save</button>
         </div>
 
-        <div className="space-y-3">
+        <div className="p-5 space-y-3">
+          <h3 className="font-semibold">Edit note</h3>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time remaining</div>
@@ -129,64 +140,26 @@ export default function NoteEditor({ note, sessionId, onClose }) {
           </TagSection>
 
           {game?.puzzles?.length > 0 && (
-            <TagSection title="Puzzles">
-              {game.puzzles.map(p => {
-                const active = puzzleIds.includes(p.id)
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPuzzleIds(prev => toggle(prev, p.id))}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors ${
-                      active
-                        ? 'bg-violet-500/30 border-violet-400 text-violet-100'
-                        : 'bg-ink-900 border-ink-700 text-ink-200 active:bg-ink-700'
-                    }`}
-                  >
-                    <span>🧩</span>
-                    {p.code && <span className="font-mono opacity-70">{p.code}</span>}
-                    <span>{p.name}</span>
-                  </button>
-                )
-              })}
-            </TagSection>
+            <MultiSelectDropdown
+              title="Puzzles"
+              placeholder="Select puzzles…"
+              options={game.puzzles.map(p => ({ id: p.id, label: p.name, code: p.code, prefix: '🧩' }))}
+              selected={puzzleIds}
+              onToggle={(id) => setPuzzleIds(prev => toggle(prev, id))}
+              activeClass="bg-violet-500/20 text-violet-100"
+            />
           )}
 
           {game?.components?.length > 0 && (
-            <TagSection title="Components">
-              {game.components.map(c => {
-                const active = componentIds.includes(c.id)
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setComponentIds(prev => toggle(prev, c.id))}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors ${
-                      active
-                        ? 'bg-pink-500/30 border-pink-400 text-pink-100'
-                        : 'bg-ink-900 border-ink-700 text-ink-200 active:bg-ink-700'
-                    }`}
-                  >
-                    <span>⚙</span>
-                    {c.code && <span className="font-mono opacity-70">{c.code}</span>}
-                    <span>{c.name}</span>
-                  </button>
-                )
-              })}
-            </TagSection>
+            <MultiSelectDropdown
+              title="Components"
+              placeholder="Select components…"
+              options={game.components.map(c => ({ id: c.id, label: c.name, code: c.code, prefix: '⚙' }))}
+              selected={componentIds}
+              onToggle={(id) => setComponentIds(prev => toggle(prev, id))}
+              activeClass="bg-pink-500/20 text-pink-100"
+            />
           )}
-        </div>
-
-        <div className="flex items-center gap-2 mt-4">
-          <button onClick={remove}
-            className="px-3 py-3 rounded-xl bg-rose-500/10 border border-rose-500/40 active:bg-rose-500/20 text-rose-200 font-medium">
-            Delete
-          </button>
-          <div className="flex-1" />
-          <button onClick={onClose}
-            className="px-4 py-3 rounded-xl bg-ink-700 active:bg-ink-600 font-medium">Cancel</button>
-          <button onClick={save} disabled={!tsValid || !text.trim()}
-            className="px-5 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 disabled:opacity-40 text-ink-950 font-bold">Save</button>
         </div>
       </div>
     </div>
@@ -198,6 +171,74 @@ function TagSection({ title, children }) {
     <div>
       <div className="text-xs uppercase tracking-wider text-ink-400 mb-1.5">{title}</div>
       <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+// Collapsible multi-select. Uses <details> so open/close state is native and
+// click-outside doesn't auto-collapse — keeps interaction predictable on mobile.
+function MultiSelectDropdown({ title, placeholder, options, selected, onToggle, activeClass = '' }) {
+  const selectedOptions = options.filter(o => selected.includes(o.id))
+  const summaryText = selectedOptions.length === 0
+    ? placeholder
+    : selectedOptions.length === 1
+      ? selectedOptions[0].label
+      : `${selectedOptions.length} selected`
+
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-ink-400 mb-1.5">{title}</div>
+      <details className="group rounded-xl bg-ink-900 border border-ink-700">
+        <summary className="px-3 py-2.5 cursor-pointer text-sm flex items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+          <span className={`truncate ${selectedOptions.length === 0 ? 'text-ink-400' : 'text-ink-100'}`}>
+            {summaryText}
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+               className="text-ink-400 transition-transform group-open:rotate-180 flex-shrink-0">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </summary>
+        <div className="border-t border-ink-700 max-h-56 overflow-y-auto">
+          {options.map(o => {
+            const active = selected.includes(o.id)
+            return (
+              <label key={o.id}
+                className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-ink-700/50 last:border-b-0 ${
+                  active ? activeClass : 'active:bg-ink-700'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={() => onToggle(o.id)}
+                  className="w-4 h-4 accent-accent-500 flex-shrink-0"
+                />
+                <span className="flex-shrink-0">{o.prefix}</span>
+                {o.code && <span className="font-mono text-[11px] text-ink-400 flex-shrink-0">{o.code}</span>}
+                <span className="flex-1 truncate">{o.label}</span>
+              </label>
+            )
+          })}
+        </div>
+      </details>
+      {selectedOptions.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selectedOptions.map(o => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onToggle(o.id)}
+              className={`text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1 ${activeClass || 'bg-ink-700 text-ink-100'}`}
+              title="Click to remove"
+            >
+              <span>{o.prefix}</span>
+              <span>{o.label}</span>
+              <span className="opacity-60">×</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

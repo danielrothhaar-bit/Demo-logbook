@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, fmtClockTime } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseCountdown } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
@@ -857,32 +857,67 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
     )
   }
 
+  // Puzzles with a benchmark target (any puzzle, even unsolved) — render as
+  // vertical guide lines so designers can see actual solve vs target.
+  const benchmarks = (puzzles || [])
+    .map(p => ({ ...p, benchSec: parseCountdown(p.benchmark) }))
+    .filter(p => p.benchSec != null)
+
   // Span the bar across the demo duration, but always at least far enough to
-  // include the last solve so a marker is never clipped past the right edge.
-  const span = Math.max(totalSec || 0, ...solved.map(p => p.solvedTs), 60)
+  // include the last solve and any benchmark target so nothing is clipped.
+  const span = Math.max(
+    totalSec || 0,
+    ...solved.map(p => p.solvedTs),
+    ...benchmarks.map(p => p.benchSec),
+    60
+  )
 
   return (
     <Section title="Puzzle solve timeline" hint={`${solved.length} of ${puzzles.length} puzzles solved.`}>
       <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-3">
-        <div className="relative h-10">
+        <div className="relative h-16 mt-4">
           <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
+
+          {/* Benchmark vertical guide lines — drawn under the dots so dots stay legible.
+              Hover shows the puzzle and target time; no inline label to keep the timeline clean. */}
+          {benchmarks.map(p => {
+            const pct = span > 0 ? Math.min(100, Math.max(0, (p.benchSec / span) * 100)) : 0
+            return (
+              <div
+                key={`bench-${p.id}`}
+                className="absolute top-0 bottom-0 -translate-x-1/2 group"
+                style={{ left: `${pct}%` }}
+              >
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 border-l border-dashed border-yellow-300/70" />
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-ink-900 border border-yellow-500/40 text-[10px] text-yellow-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
+                  Benchmark · {p.name} · {fmtCountdown(p.benchSec)}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Solve dots */}
           {solved.map((p, i) => {
             const pct = span > 0 ? Math.min(100, Math.max(0, (p.solvedTs / span) * 100)) : 0
             return (
               <div
                 key={p.id}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"
                 style={{ left: `${pct}%` }}
-                title={`${p.name} solved at ${fmtCountdown(p.solvedTs)}`}
               >
-                <span className="w-4 h-4 rounded-full bg-yellow-400 border-2 border-ink-800 flex items-center justify-center text-[8px] font-bold text-ink-950 leading-none">
+                <span className="block w-7 h-7 rounded-full bg-yellow-400 border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg shadow-yellow-400/30">
                   {i + 1}
                 </span>
+                {/* Hover label */}
+                <div className="absolute left-1/2 -translate-x-1/2 -top-9 px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl">
+                  {p.name}
+                  <span className="text-ink-400 font-mono ml-1">· {fmtCountdown(p.solvedTs)}</span>
+                </div>
               </div>
             )
           })}
         </div>
-        <div className="flex justify-between text-[10px] text-ink-500 font-mono tabular-nums">
+        <div className="flex justify-between text-[10px] text-ink-500 font-mono tabular-nums pt-3">
           <span>{fmtCountdown(0)}</span>
           <span>{fmtCountdown(span)}</span>
         </div>

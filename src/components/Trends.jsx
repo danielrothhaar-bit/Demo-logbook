@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, parseCountdown } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -495,7 +495,58 @@ function PuzzleSolveTimes({ solveTimes }) {
             </div>
           ))}
         </div>
+
+        <BenchmarksSubsection perPuzzle={perPuzzle} />
       </div>
+    </div>
+  )
+}
+
+// Per-puzzle benchmark target vs the avg actual solve time across demos.
+// Only renders puzzles where a benchmark was set on the puzzle in Admin.
+function BenchmarksSubsection({ perPuzzle }) {
+  const benchmarked = perPuzzle
+    .map(p => ({ ...p, benchmarkSec: parseCountdown(p.benchmark) }))
+    .filter(p => p.benchmarkSec != null)
+
+  if (benchmarked.length === 0) return null
+
+  return (
+    <div className="pt-3 mt-1 border-t border-ink-700 space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold flex items-center gap-1.5">
+        <span>⏱</span> Benchmarks
+      </div>
+      <div className="text-[11px] text-ink-500 -mt-1">
+        Target solve time vs averaged actual across demos. Negative delta = team is ahead of the benchmark.
+      </div>
+      {benchmarked.map(p => {
+        const hasAvg = p.avgSolvedTs != null
+        const delta = hasAvg ? p.avgSolvedTs - p.benchmarkSec : null
+        const ahead = delta != null && delta < 0
+        return (
+          <div key={p.id} className="rounded-lg bg-ink-900 border border-yellow-500/30 p-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              {p.code && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700">{p.code}</span>
+              )}
+              <span className="font-semibold text-sm text-ink-100 truncate flex-1">{p.name}</span>
+              <span className="font-mono tabular-nums text-[11px] text-yellow-300">target {fmtCountdown(p.benchmarkSec)}</span>
+            </div>
+            <div className="text-[11px] mt-1 font-mono tabular-nums flex items-center gap-2 flex-wrap">
+              {hasAvg ? (
+                <>
+                  <span className="text-ink-400">avg solved {fmtCountdown(p.avgSolvedTs)} ({p.solvedDemoCount} demo{p.solvedDemoCount === 1 ? '' : 's'})</span>
+                  <span className={ahead ? 'text-emerald-300' : delta === 0 ? 'text-ink-300' : 'text-rose-300'}>
+                    {delta === 0 ? 'on target' : `${ahead ? '−' : '+'}${fmtTime(Math.abs(delta))} ${ahead ? 'ahead' : 'behind'}`}
+                  </span>
+                </>
+              ) : (
+                <span className="text-ink-500 italic">not solved yet in any demo</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

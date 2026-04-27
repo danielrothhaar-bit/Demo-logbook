@@ -232,6 +232,7 @@ export function analyzePuzzles(notes, game) {
       id: p.id,
       name: p.name,
       code: p.code || '',
+      benchmark: p.benchmark || '',
       status,
       firstTouchTs,
       solvedTs,
@@ -638,7 +639,15 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
   // Per-puzzle solve-time samples.
   const samples = {}
   for (const p of game.puzzles) {
-    samples[p.id] = { id: p.id, name: p.name, code: p.code || '', times: [], demosSolved: new Set() }
+    samples[p.id] = {
+      id: p.id,
+      name: p.name,
+      code: p.code || '',
+      benchmark: p.benchmark || '',
+      times: [],
+      solvedTimestamps: [],
+      demosSolved: new Set()
+    }
   }
 
   let allSolveDurations = []
@@ -653,6 +662,7 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
     for (const p of solvesInSession) {
       if (samples[p.id]) {
         samples[p.id].demosSolved.add(sess.id)
+        samples[p.id].solvedTimestamps.push(p.solvedTs)
         if (p.timeOnPuzzle != null && p.timeOnPuzzle > 0) {
           samples[p.id].times.push(p.timeOnPuzzle)
           allSolveDurations.push(p.timeOnPuzzle)
@@ -668,12 +678,19 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
   const perPuzzle = Object.values(samples).map(s => {
     const count = s.times.length
     const avg = count ? Math.round(s.times.reduce((a, b) => a + b, 0) / count) : null
+    const tsCount = s.solvedTimestamps.length
+    const avgSolvedTs = tsCount
+      ? Math.round(s.solvedTimestamps.reduce((a, b) => a + b, 0) / tsCount)
+      : null
     return {
       id: s.id,
       name: s.name,
       code: s.code,
+      benchmark: s.benchmark,
       solveCount: count,
+      solvedDemoCount: tsCount,
       avgSolveTime: avg,
+      avgSolvedTs,
       fastestSolve: count ? Math.min(...s.times) : null,
       slowestSolve: count ? Math.max(...s.times) : null,
       demosSolved: s.demosSolved.size

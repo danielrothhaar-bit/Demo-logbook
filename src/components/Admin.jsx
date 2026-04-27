@@ -268,8 +268,9 @@ function GameRow({ game, isNewest }) {
         <div className="border-t border-ink-700 bg-ink-900/40 p-3 space-y-3">
           <NamedItemList
             title="Puzzles"
-            hint="Auto-tag and link notes that mention these by name."
+            hint="Auto-tag and link notes that mention these by name. Optional benchmark = target solve time (mm:ss countdown)."
             items={puzzles}
+            kind="puzzle"
             onAdd={(name, code) => dispatch({ type: 'ADD_PUZZLE', gameId: game.id, name, code })}
             onUpdate={(id, patch) => dispatch({ type: 'UPDATE_PUZZLE', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_PUZZLE', gameId: game.id, id })}
@@ -279,6 +280,7 @@ function GameRow({ game, isNewest }) {
             title="Components"
             hint="Physical props, locks, screens, audio cues, etc. Code is shown as a small chip; auto-tagging matches names only."
             items={components}
+            kind="component"
             onAdd={(name, code) => dispatch({ type: 'ADD_COMPONENT', gameId: game.id, name, code })}
             onUpdate={(id, patch) => dispatch({ type: 'UPDATE_COMPONENT', gameId: game.id, id, patch })}
             onDelete={(id) => dispatch({ type: 'DELETE_COMPONENT', gameId: game.id, id })}
@@ -290,7 +292,7 @@ function GameRow({ game, isNewest }) {
   )
 }
 
-function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete, onReorder }) {
+function NamedItemList({ title, hint, items, kind, onAdd, onUpdate, onDelete, onReorder }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const add = () => {
@@ -314,7 +316,7 @@ function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete, onReorde
       {hint && <div className="text-[11px] text-ink-500 mb-2">{hint}</div>}
       <div className="space-y-1.5">
         {items.map((item, i) => (
-          <NamedItemRow key={item.id} item={item}
+          <NamedItemRow key={item.id} item={item} kind={kind}
             canUp={i > 0} canDown={i < items.length - 1}
             onMoveUp={() => move(i, -1)}
             onMoveDown={() => move(i, 1)}
@@ -345,26 +347,46 @@ function NamedItemList({ title, hint, items, onAdd, onUpdate, onDelete, onReorde
   )
 }
 
-function NamedItemRow({ item, canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
+function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(item.name)
   const [code, setCode] = useState(item.code || '')
+  const [benchmark, setBenchmark] = useState(item.benchmark || '')
+  const isPuzzle = kind === 'puzzle'
   const save = () => {
     const v = name.trim()
     if (!v) return
-    onSave({ name: v, code: code.trim() })
+    const patch = { name: v, code: code.trim() }
+    if (isPuzzle) patch.benchmark = benchmark.trim()
+    onSave(patch)
     setEditing(false)
   }
   if (editing) {
     return (
-      <div className="flex items-center gap-2 bg-ink-800 border border-accent-500 rounded-lg px-2 py-1">
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code"
-          className="w-20 bg-transparent outline-none text-sm font-mono" />
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          className="flex-1 min-w-0 bg-transparent outline-none text-sm" />
-        <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2">Cancel</button>
-        <button onClick={save} className="text-xs px-2 py-1 rounded-md bg-emerald-500 text-ink-950 font-semibold">Save</button>
+      <div className="bg-ink-800 border border-accent-500 rounded-lg p-2 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code"
+            className="w-20 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm font-mono focus:border-accent-500" />
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+            className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500" />
+        </div>
+        {isPuzzle && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Benchmark</span>
+            <input
+              value={benchmark}
+              onChange={(e) => setBenchmark(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+              placeholder="e.g. 45:00 (optional)"
+              className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm font-mono focus:border-accent-500"
+            />
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2 py-1">Cancel</button>
+          <button onClick={save} className="text-xs px-3 py-1.5 rounded-md bg-emerald-500 text-ink-950 font-semibold">Save</button>
+        </div>
       </div>
     )
   }
@@ -380,6 +402,12 @@ function NamedItemRow({ item, canUp, canDown, onMoveUp, onMoveDown, onSave, onDe
         </span>
       )}
       <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
+      {isPuzzle && item.benchmark && (
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/40 flex-shrink-0"
+              title={`Benchmark target: ${item.benchmark}`}>
+          ⏱ {item.benchmark}
+        </span>
+      )}
       <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2 flex-shrink-0">Edit</button>
       <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30 flex-shrink-0">✕</button>
     </div>

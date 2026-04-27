@@ -250,7 +250,7 @@ export function reducer(state, action) {
       // Migrations: ensure newer fields exist on data persisted before they were added
       next.games = (next.games || []).map(g => ({
         ...g,
-        puzzles: (g.puzzles || []).map(p => ({ ...p, code: p.code || '' })),
+        puzzles: (g.puzzles || []).map(p => ({ ...p, code: p.code || '', benchmark: p.benchmark || '' })),
         components: (g.components || []).map(c => ({ ...c, code: c.code || '' }))
       }))
       next.sessions = (next.sessions || []).map(s => ({
@@ -319,7 +319,12 @@ export function reducer(state, action) {
     // Per-game puzzles
     case 'ADD_PUZZLE':
       return updateGameField(state, action.gameId, 'puzzles', list => [
-        ...list, { id: action.id || ('p_' + uid()), name: action.name.trim(), code: (action.code || '').trim() }
+        ...list, {
+          id: action.id || ('p_' + uid()),
+          name: action.name.trim(),
+          code: (action.code || '').trim(),
+          benchmark: (action.benchmark || '').trim()
+        }
       ])
     case 'UPDATE_PUZZLE':
       return updateGameField(state, action.gameId, 'puzzles', list =>
