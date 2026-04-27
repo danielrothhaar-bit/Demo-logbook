@@ -979,17 +979,20 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
             )
           })}
 
-          {/* Solve dots — green/red for benchmarked puzzles based on ±3-min window, else yellow. */}
+          {/* Solve dots — orange for SUE solves; otherwise green/red for
+              benchmarked puzzles based on ±3-min window, falling back to yellow. */}
           {solved.map((p, i) => {
             const pct = Math.min(100, Math.max(0, (p.solvedTs / span) * 100))
             const benchSec = benchSecById[p.id]
             const hasBenchmark = benchSec != null
             const onTime = hasBenchmark && Math.abs(p.solvedTs - benchSec) <= BENCHMARK_TOLERANCE_SEC
-            const dotClass = !hasBenchmark
-              ? 'bg-yellow-400 shadow-yellow-400/30'
-              : onTime
-                ? 'bg-emerald-400 shadow-emerald-400/40'
-                : 'bg-rose-500 shadow-rose-500/40'
+            const dotClass = p.isSue
+              ? 'bg-orange-500 shadow-orange-500/40'
+              : !hasBenchmark
+                ? 'bg-yellow-400 shadow-yellow-400/30'
+                : onTime
+                  ? 'bg-emerald-400 shadow-emerald-400/40'
+                  : 'bg-rose-500 shadow-rose-500/40'
             const deltaLabel = hasBenchmark
               ? (() => {
                   const delta = p.solvedTs - benchSec
@@ -1010,6 +1013,7 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
                 <div className={`absolute -top-9 ${chipAlign(pct)} px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl`}>
                   {p.name}
                   <span className="text-ink-400 font-mono ml-1">· {fmtCountdown(p.solvedTs)}</span>
+                  {p.isSue && <span className="text-orange-300 ml-1">· SUE</span>}
                   {deltaLabel && (
                     <span className={`ml-1 ${onTime ? 'text-emerald-300' : 'text-rose-300'}`}>· {deltaLabel}</span>
                   )}

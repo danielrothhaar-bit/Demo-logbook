@@ -10,7 +10,7 @@ import ClickablePhoto from './ClickablePhoto.jsx'
 // (text / puzzle / component / photo) and saves a note with the matching
 // category tag. Replaces the old "type a note + quick tags" layout.
 const ACTIONS = [
-  { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false, noPhoto: true },
+  { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false, noPhoto: true, hasSueToggle: true },
   { id: 'game_change',   label: 'Game Change',   accent: 'blue',    tag: 'Game Change',   hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'tech_issue',    label: 'Tech Issue',    accent: 'yellow',  tag: 'Tech Issue',    hasText: true,  hasPuzzle: false, hasComponent: true, filterTechComponents: true },
   { id: 'note',          label: 'Note',          accent: 'grey',    tag: null,            hasText: true,  hasPuzzle: false, hasComponent: false, requireText: true },
@@ -147,6 +147,12 @@ export default function LiveLogging() {
       }
     }
     const categories = action.tag ? [action.tag] : []
+    // Modal can pass through extra category tags (e.g. SUE on Puzzle Solved).
+    if (Array.isArray(payload.extraCategories)) {
+      for (const c of payload.extraCategories) {
+        if (c && !categories.includes(c)) categories.push(c)
+      }
+    }
     // Auto-add the SFX tag whenever the note's text mentions "SFX" (word
     // boundary, case-insensitive). Designers don't have a button for it.
     if (/\bsfx\b/i.test(text) && !categories.includes('SFX')) {
@@ -483,6 +489,7 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
   const [puzzleId, setPuzzleId] = useState('')
   const [componentId, setComponentId] = useState('')
   const [pendingPhoto, setPendingPhoto] = useState(null)
+  const [isSue, setIsSue] = useState(false)
   const photoInputRef = useRef(null)
 
   const allPuzzles = game?.puzzles || []
@@ -515,7 +522,8 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
       text: text.trim(),
       puzzleIds: action.hasPuzzle && puzzleId ? [puzzleId] : [],
       componentIds: action.hasComponent && componentId ? [componentId] : [],
-      photoUrl: pendingPhoto
+      photoUrl: pendingPhoto,
+      extraCategories: action.hasSueToggle && isSue ? ['SUE'] : []
     })
   }
 
@@ -628,6 +636,21 @@ function ActionLogModal({ action, game, alreadySolvedPuzzleIds, onClose, onConfi
                 />
               )}
             </div>
+          )}
+
+          {action.hasSueToggle && (
+            <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-ink-900 border border-ink-700 cursor-pointer active:bg-ink-700">
+              <input
+                type="checkbox"
+                checked={isSue}
+                onChange={(e) => setIsSue(e.target.checked)}
+                className="w-5 h-5 accent-orange-500 flex-shrink-0"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-orange-300">Mark as SUE</div>
+                <div className="text-[11px] text-ink-500">Excluded from trends averages; still shown on this demo's timeline.</div>
+              </div>
+            </label>
           )}
 
           {!action.noPhoto && (

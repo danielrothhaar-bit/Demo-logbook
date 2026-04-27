@@ -24,6 +24,7 @@ export const CATEGORY_COLORS = {
   'Clue':                '#facc15',
   'Puzzle Solved':       '#2dd4bf',
   'SFX':                 '#f0abfc',
+  'SUE':                 '#f97316',
   'Feedback Discussion': '#22d3ee'
 }
 

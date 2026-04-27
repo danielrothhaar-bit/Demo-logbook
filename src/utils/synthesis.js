@@ -200,6 +200,9 @@ export function analyzePuzzles(notes, game) {
   const live = notes.filter(n => n.kind !== 'feedback')
 
   // Pass 1: collect raw per-puzzle facts (notes, first-touch, solve).
+  // A SUE-tagged solve note flags this puzzle's solve as "SUE" — kept in the
+  // per-demo timeline but excluded from the cross-session averages so weird
+  // edge-case runs don't skew trend numbers.
   const facts = puzzles.map(p => {
     const tagged = live
       .filter(n => (n.puzzleIds || []).includes(p.id))
@@ -209,7 +212,8 @@ export function analyzePuzzles(notes, game) {
       puzzle: p,
       tagged,
       firstTouchTs: tagged.length ? tagged[0].timestamp : null,
-      solvedTs: solveNote ? solveNote.timestamp : null
+      solvedTs: solveNote ? solveNote.timestamp : null,
+      isSue: solveNote ? (solveNote.categories || []).includes('SUE') : false
     }
   })
   const factsById = new Map(facts.map(f => [f.puzzle.id, f]))
@@ -219,7 +223,7 @@ export function analyzePuzzles(notes, game) {
   // before this puzzle's solve). Falls back to first-touch when no usable
   // prereq data is present, so an out-of-order solve still gets a duration.
   return facts.map(f => {
-    const { puzzle: p, tagged, firstTouchTs, solvedTs } = f
+    const { puzzle: p, tagged, firstTouchTs, solvedTs, isSue } = f
     const dependsOn = Array.isArray(p.dependsOn) ? p.dependsOn : []
 
     let baselineTs = firstTouchTs
@@ -275,6 +279,7 @@ export function analyzePuzzles(notes, game) {
       benchmarkName: p.benchmarkName || '',
       dependsOn,
       status,
+      isSue,
       firstTouchTs,
       baselineTs,
       baselineSource,
@@ -700,11 +705,14 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
 
   for (const sess of relevant) {
     const stats = analyzePuzzles(sess.notes, game)
-    const solvesInSession = stats
-      .filter(p => p.solvedTs != null)
+    // SUE-tagged solves are deliberately excluded from cross-session averages
+    // (the user can mark unusual runs to keep trend math clean) but the per-
+    // demo timeline in Review still shows them.
+    const regularSolves = stats
+      .filter(p => p.solvedTs != null && !p.isSue)
       .sort((a, b) => a.solvedTs - b.solvedTs)
 
-    for (const p of solvesInSession) {
+    for (const p of regularSolves) {
       if (samples[p.id]) {
         samples[p.id].demosSolved.add(sess.id)
         samples[p.id].solvedTimestamps.push(p.solvedTs)
@@ -714,8 +722,8 @@ export function aggregatePuzzleSolveTimes(sessions, game) {
         }
       }
     }
-    for (let i = 1; i < solvesInSession.length; i++) {
-      const gap = solvesInSession[i].solvedTs - solvesInSession[i - 1].solvedTs
+    for (let i = 1; i < regularSolves.length; i++) {
+      const gap = regularSolves[i].solvedTs - regularSolves[i - 1].solvedTs
       if (gap >= 0) allGaps.push(gap)
     }
   }
