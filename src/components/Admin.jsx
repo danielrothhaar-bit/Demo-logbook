@@ -316,7 +316,7 @@ function NamedItemList({ title, hint, items, kind, onAdd, onUpdate, onDelete, on
       {hint && <div className="text-[11px] text-ink-500 mb-2">{hint}</div>}
       <div className="space-y-1.5">
         {items.map((item, i) => (
-          <NamedItemRow key={item.id} item={item} kind={kind}
+          <NamedItemRow key={item.id} item={item} kind={kind} allItems={items}
             canUp={i > 0} canDown={i < items.length - 1}
             onMoveUp={() => move(i, -1)}
             onMoveDown={() => move(i, 1)}
@@ -347,12 +347,17 @@ function NamedItemList({ title, hint, items, kind, onAdd, onUpdate, onDelete, on
   )
 }
 
-function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
+function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onMoveDown, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(item.name)
   const [code, setCode] = useState(item.code || '')
   const [benchmark, setBenchmark] = useState(item.benchmark || '')
   const [benchmarkName, setBenchmarkName] = useState(item.benchmarkName || '')
+  // Available-after prerequisites: ids of other puzzles this one becomes
+  // solvable after. Used by the analyzer to anchor solve-time start.
+  const [dependsOn, setDependsOn] = useState(
+    Array.isArray(item.dependsOn) ? item.dependsOn : []
+  )
   const isPuzzle = kind === 'puzzle'
   const save = () => {
     const v = name.trim()
@@ -361,6 +366,9 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
     if (isPuzzle) {
       patch.benchmark = benchmark.trim()
       patch.benchmarkName = benchmarkName.trim()
+      // Drop any ids that no longer exist in the current list (defensive).
+      const validIds = new Set(allItems.map(p => p.id))
+      patch.dependsOn = dependsOn.filter(id => id !== item.id && validIds.has(id))
     }
     onSave(patch)
     setEditing(false)
@@ -407,6 +415,19 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
                   className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500"
                 />
               </div>
+              <div className="flex items-start gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold w-20 flex-shrink-0 pt-2">Available after</span>
+                <div className="flex-1 min-w-0">
+                  <AvailableAfterPicker
+                    options={allItems.filter(p => p.id !== item.id)}
+                    selectedIds={dependsOn}
+                    onChange={setDependsOn}
+                  />
+                  <div className="text-[10px] text-ink-500 mt-1">
+                    Solve-time clock starts when these are all solved (or first-mention if none set).
+                  </div>
+                </div>
+              </div>
             </>
           )
         })()}
@@ -429,6 +450,17 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
         </span>
       )}
       <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
+      {isPuzzle && Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && (() => {
+        const names = item.dependsOn
+          .map(id => allItems.find(p => p.id === id)?.name)
+          .filter(Boolean)
+        return (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 flex-shrink-0"
+                title={`Available after: ${names.join(', ')}`}>
+            ↩ {item.dependsOn.length}
+          </span>
+        )
+      })()}
       {isPuzzle && item.benchmark && (() => {
         const valid = parseBenchmark(item.benchmark) != null
         return (
@@ -510,6 +542,76 @@ function TagsPanel() {
           Add
         </button>
       </div>
+    </div>
+  )
+}
+
+
+// Compact <details>-based multiselect of other puzzles for the Available-after
+// prerequisite. Selected ids surface as removable chips below the trigger so
+// designers can see and edit picks without re-opening the dropdown.
+function AvailableAfterPicker({ options, selectedIds, onChange }) {
+  const selected = options.filter(p => selectedIds.includes(p.id))
+  const summary = selected.length === 0
+    ? '— None —'
+    : selected.length === 1
+      ? selected[0].name
+      : `${selected.length} prerequisites`
+
+  const toggle = (id) => {
+    onChange(selectedIds.includes(id)
+      ? selectedIds.filter(x => x !== id)
+      : [...selectedIds, id])
+  }
+
+  if (options.length === 0) {
+    return <div className="text-[11px] text-ink-500 italic px-2 py-1.5">No other puzzles in this game yet.</div>
+  }
+
+  return (
+    <div>
+      <details className="group rounded-lg bg-ink-900 border border-ink-700">
+        <summary className="px-3 py-1.5 cursor-pointer text-sm flex items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+          <span className={`truncate ${selected.length === 0 ? 'text-ink-400' : 'text-ink-100'}`}>{summary}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+               className="text-ink-400 transition-transform group-open:rotate-180 flex-shrink-0">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </summary>
+        <div className="border-t border-ink-700 max-h-48 overflow-y-auto">
+          {options.map(p => {
+            const active = selectedIds.includes(p.id)
+            return (
+              <label key={p.id}
+                className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm border-b border-ink-700/50 last:border-b-0 ${
+                  active ? 'bg-cyan-500/10' : 'active:bg-ink-700'
+                }`}>
+                <input type="checkbox" checked={active} onChange={() => toggle(p.id)}
+                  className="w-4 h-4 accent-cyan-400 flex-shrink-0" />
+                {p.code && <span className="font-mono text-[11px] text-ink-400">{p.code}</span>}
+                <span className="flex-1 truncate">{p.name}</span>
+              </label>
+            )
+          })}
+        </div>
+      </details>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selected.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => toggle(p.id)}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-200 border border-cyan-500/40 flex items-center gap-1"
+              title="Click to remove"
+            >
+              <span className="truncate max-w-[8rem]">{p.name}</span>
+              <span className="opacity-60">×</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

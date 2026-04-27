@@ -199,15 +199,39 @@ export function analyzePuzzles(notes, game) {
 
   const live = notes.filter(n => n.kind !== 'feedback')
 
-  return puzzles.map(p => {
+  // Pass 1: collect raw per-puzzle facts (notes, first-touch, solve).
+  const facts = puzzles.map(p => {
     const tagged = live
       .filter(n => (n.puzzleIds || []).includes(p.id))
       .sort((a, b) => a.timestamp - b.timestamp)
-
     const solveNote = tagged.find(n => (n.categories || []).includes('Puzzle Solved'))
-    const firstTouchTs = tagged.length ? tagged[0].timestamp : null
-    const solvedTs = solveNote ? solveNote.timestamp : null
-    const timeOnPuzzle = solvedTs != null && firstTouchTs != null ? solvedTs - firstTouchTs : null
+    return {
+      puzzle: p,
+      tagged,
+      firstTouchTs: tagged.length ? tagged[0].timestamp : null,
+      solvedTs: solveNote ? solveNote.timestamp : null
+    }
+  })
+  const factsById = new Map(facts.map(f => [f.puzzle.id, f]))
+
+  // Pass 2: derive solve duration. If `dependsOn` is set, the clock starts
+  // at the latest prerequisite's solve time (only counting prereqs solved
+  // before this puzzle's solve). Falls back to first-touch when no usable
+  // prereq data is present, so an out-of-order solve still gets a duration.
+  return facts.map(f => {
+    const { puzzle: p, tagged, firstTouchTs, solvedTs } = f
+    const dependsOn = Array.isArray(p.dependsOn) ? p.dependsOn : []
+
+    let baselineTs = firstTouchTs
+    if (dependsOn.length > 0 && solvedTs != null) {
+      const usablePrereqSolves = dependsOn
+        .map(id => factsById.get(id)?.solvedTs)
+        .filter(t => t != null && t < solvedTs)
+      if (usablePrereqSolves.length > 0) {
+        baselineTs = Math.max(...usablePrereqSolves)
+      }
+    }
+    const timeOnPuzzle = solvedTs != null && baselineTs != null ? solvedTs - baselineTs : null
 
     const negativeNotes = tagged.filter(n => (n.categories || []).some(c => NEGATIVE.has(c)))
     const positiveNotes = tagged.filter(n => (n.categories || []).some(c => POSITIVE.has(c)))
@@ -234,8 +258,10 @@ export function analyzePuzzles(notes, game) {
       code: p.code || '',
       benchmark: p.benchmark || '',
       benchmarkName: p.benchmarkName || '',
+      dependsOn,
       status,
       firstTouchTs,
+      baselineTs,
       solvedTs,
       timeOnPuzzle,
       negativeCount,

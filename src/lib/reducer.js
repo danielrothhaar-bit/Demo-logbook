@@ -254,7 +254,8 @@ export function reducer(state, action) {
           ...p,
           code: p.code || '',
           benchmark: p.benchmark || '',
-          benchmarkName: p.benchmarkName || ''
+          benchmarkName: p.benchmarkName || '',
+          dependsOn: Array.isArray(p.dependsOn) ? p.dependsOn : []
         })),
         components: (g.components || []).map(c => ({ ...c, code: c.code || '' }))
       }))
@@ -329,7 +330,8 @@ export function reducer(state, action) {
           name: action.name.trim(),
           code: (action.code || '').trim(),
           benchmark: (action.benchmark || '').trim(),
-          benchmarkName: (action.benchmarkName || '').trim()
+          benchmarkName: (action.benchmarkName || '').trim(),
+          dependsOn: Array.isArray(action.dependsOn) ? action.dependsOn : []
         }
       ])
     case 'UPDATE_PUZZLE':
@@ -337,7 +339,13 @@ export function reducer(state, action) {
         list.map(p => p.id === action.id ? { ...p, ...action.patch } : p))
     case 'DELETE_PUZZLE':
       return updateGameField(state, action.gameId, 'puzzles', list =>
-        list.filter(p => p.id !== action.id))
+        list
+          .filter(p => p.id !== action.id)
+          // Strip the deleted id from any other puzzle's dependsOn so we don't
+          // leave dangling references that would silently break solve-time math.
+          .map(p => Array.isArray(p.dependsOn) && p.dependsOn.includes(action.id)
+            ? { ...p, dependsOn: p.dependsOn.filter(d => d !== action.id) }
+            : p))
 
     // Per-game components
     case 'ADD_COMPONENT':
