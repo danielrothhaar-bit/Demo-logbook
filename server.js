@@ -1,4 +1,5 @@
 import express from 'express'
+import compression from 'compression'
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -97,11 +98,33 @@ function broadcast() {
 // ---- Express ----
 
 const app = express()
+
+// gzip everything except SSE — the event stream needs unbuffered writes, and
+// compression buffers chunks until threshold which would delay broadcasts.
+// Default compression.filter already skips images and a few other types.
+app.use(compression({
+  filter: (req, res) => {
+    if (req.url === '/api/events') return false
+    return compression.filter(req, res)
+  }
+}))
+
 app.use(express.json({ limit: '60mb' })) // photos and feedback-discussion audio arrive base64-encoded
 
 app.get('/healthz', (_req, res) => res.send('ok'))
 
-app.get('/api/state', (_req, res) => {
+app.get('/api/state', (req, res) => {
+  // Version-based ETag — every persisted action bumps the version, so the
+  // ETag changes if-and-only-if the slice changed. Conditional GET lets the
+  // client skip re-downloading megabytes of base64 photos when state is
+  // unchanged (common: SSE pings on the same version, refreshes between
+  // sessions, etc).
+  const etag = `"v${currentVersion}"`
+  res.set('Cache-Control', 'no-cache')
+  res.set('ETag', etag)
+  if (req.headers['if-none-match'] === etag) {
+    return res.status(304).end()
+  }
   res.json({ state: currentSlice, version: currentVersion })
 })
 

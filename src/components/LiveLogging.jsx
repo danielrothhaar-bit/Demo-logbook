@@ -336,9 +336,6 @@ export default function LiveLogging() {
                   className={`rounded-2xl py-5 px-3 font-bold text-base shadow-lg disabled:opacity-40 ${ACCENT[action.accent].btn}`}
                 >
                   {action.label}
-                  {action.id === 'puzzle_solved' && puzzleSolvedDisabled && totalPuzzles > 0 && (
-                    <span className="block text-[10px] font-medium opacity-80 mt-0.5">all {totalPuzzles} solved</span>
-                  )}
                 </button>
               )
             })}

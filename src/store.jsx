@@ -46,6 +46,7 @@ function fillIdsForSync(action) {
 }
 
 const ACTIVE_DESIGNER_KEY = 'demo-logbook:activeDesignerId'
+const NAV_KEY = 'demo-logbook:nav'
 
 function readStoredActiveDesigner() {
   try { return localStorage.getItem(ACTIVE_DESIGNER_KEY) || null } catch { return null }
@@ -56,6 +57,22 @@ function writeStoredActiveDesigner(id) {
     if (id) localStorage.setItem(ACTIVE_DESIGNER_KEY, id)
     else localStorage.removeItem(ACTIVE_DESIGNER_KEY)
   } catch {}
+}
+
+// Per-device nav memory so refreshing the page keeps the user on whatever
+// screen they were on. Includes the currently open live + review session ids
+// so we can land back on the same demo, not just the same tab.
+function readStoredNav() {
+  try {
+    const raw = localStorage.getItem(NAV_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredNav(nav) {
+  try { localStorage.setItem(NAV_KEY, JSON.stringify(nav || {})) } catch {}
 }
 
 export function StoreProvider({ children }) {
@@ -91,7 +108,10 @@ export function StoreProvider({ children }) {
   }
 
   const refreshFromServer = () => {
-    fetch('/api/state', { cache: 'no-store' })
+    // 'no-cache' lets the browser issue a conditional GET (If-None-Match
+    // against the server's version-based ETag), so unchanged state returns
+    // a 304 with no body — much cheaper than re-downloading megabytes.
+    fetch('/api/state', { cache: 'no-cache' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => hydrateIfNewer(state, version))
       .catch(() => {})
@@ -106,7 +126,7 @@ export function StoreProvider({ children }) {
   // ---- Bootstrap from server ----
   useEffect(() => {
     let alive = true
-    fetch('/api/state', { cache: 'no-store' })
+    fetch('/api/state', { cache: 'no-cache' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => {
         if (!alive) return
@@ -118,6 +138,20 @@ export function StoreProvider({ children }) {
         if (stored && (state?.designers || []).some(d => d.id === stored)) {
           baseDispatch({ type: 'SET_ACTIVE_DESIGNER', id: stored })
         }
+        // Restore last-visited screen so refresh doesn't always dump the user
+        // on Home. Validate session ids against the just-hydrated state.
+        const nav = readStoredNav()
+        if (nav?.mode) {
+          const sessions = state?.sessions || []
+          const sessionExists = (id) => id && sessions.some(s => s.id === id)
+          if (nav.mode === 'live' && sessionExists(nav.activeSessionId)) {
+            baseDispatch({ type: 'OPEN_SESSION_LIVE', id: nav.activeSessionId })
+          } else if (nav.mode === 'review' && sessionExists(nav.reviewSessionId)) {
+            baseDispatch({ type: 'OPEN_SESSION_REVIEW', id: nav.reviewSessionId })
+          } else if (['home', 'setup', 'trends', 'admin'].includes(nav.mode)) {
+            baseDispatch({ type: 'SET_MODE', mode: nav.mode })
+          }
+        }
       })
       .catch(() => {
         // Offline / no backend — mark hydrated so the UI doesn't show a loading state forever
@@ -125,6 +159,16 @@ export function StoreProvider({ children }) {
       })
     return () => { alive = false }
   }, [])
+
+  // Mirror nav state → localStorage so refresh restores it.
+  useEffect(() => {
+    if (!state.hydrated) return
+    writeStoredNav({
+      mode: state.mode,
+      activeSessionId: state.activeSessionId,
+      reviewSessionId: state.reviewSessionId
+    })
+  }, [state.hydrated, state.mode, state.activeSessionId, state.reviewSessionId])
 
   // ---- SSE subscription so other devices' changes surface in near-real-time ----
   useEffect(() => {
@@ -176,8 +220,7 @@ export function StoreProvider({ children }) {
     fetch('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: filled }),
-      cache: 'no-store'
+      body: JSON.stringify({ action: filled })
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(({ state, version }) => {
