@@ -276,13 +276,13 @@ function SessionPicker() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (confirm(`Restart "${gameName(s.gameId)}" demo and resume in Live?`)) {
+                      if (confirm(`Re-open "${gameName(s.gameId)}" demo and resume in Live?`)) {
                         dispatch({ type: 'RESTART_SESSION', sessionId: s.id })
                       }
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 active:bg-emerald-500/25 font-medium"
                   >
-                    Restart Demo
+                    Re-Open Demo
                   </button>
                 )}
               </div>
@@ -613,7 +613,23 @@ function ReviewHeader({ session, totalSec }) {
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-end gap-2 mt-3">
+      <div className="flex items-center justify-end gap-2 mt-3 flex-wrap">
+        {session.ended && (
+          <button
+            onClick={() => {
+              if (confirm(`Re-open "${gameName(session.gameId)}" demo and resume in Live?`)) {
+                dispatch({ type: 'RESTART_SESSION', sessionId: session.id })
+              }
+            }}
+            className="text-xs text-emerald-100 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 active:bg-emerald-500/25 font-medium flex items-center gap-1.5"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            Re-Open Demo
+          </button>
+        )}
         <button
           onClick={() => downloadSessionCsv(session, { gameName, designerById, gameById })}
           className="text-xs text-ink-100 px-3 py-1.5 rounded-lg bg-accent-500/15 border border-accent-500/40 active:bg-accent-500/25 font-medium flex items-center gap-1.5"
