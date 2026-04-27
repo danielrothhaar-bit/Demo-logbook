@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useStore, initialsFromName } from '../store.jsx'
+import { useStore, initialsFromName, parseBenchmark } from '../store.jsx'
 
 const SECTIONS = [
   { id: 'designers', label: 'Designers' },
@@ -375,30 +375,41 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
             onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
             className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500" />
         </div>
-        {isPuzzle && (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Benchmark</span>
-              <input
-                value={benchmark}
-                onChange={(e) => setBenchmark(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-                placeholder="e.g. 45:00 (optional)"
-                className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm font-mono focus:border-accent-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Bench label</span>
-              <input
-                value={benchmarkName}
-                onChange={(e) => setBenchmarkName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-                placeholder="e.g. Halfway, Locker, Final"
-                className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500"
-              />
-            </div>
-          </>
-        )}
+        {isPuzzle && (() => {
+          const trimmedBench = benchmark.trim()
+          const benchValid = !trimmedBench || parseBenchmark(trimmedBench) != null
+          return (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Benchmark</span>
+                <input
+                  value={benchmark}
+                  onChange={(e) => setBenchmark(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                  placeholder="e.g. 45:00 (or just 45)"
+                  className={`flex-1 min-w-0 bg-ink-900 border rounded px-2 py-1 outline-none text-sm font-mono ${
+                    benchValid ? 'border-ink-700 focus:border-accent-500' : 'border-rose-500 focus:border-rose-400'
+                  }`}
+                />
+              </div>
+              {!benchValid && (
+                <div className="text-[11px] text-rose-300 ml-[5.5rem]">
+                  Couldn't parse "{trimmedBench}". Use mm:ss countdown form (e.g. 45:00) or bare minutes (e.g. 45). This benchmark won't render until fixed.
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-yellow-300 font-semibold w-20 flex-shrink-0">Bench label</span>
+                <input
+                  value={benchmarkName}
+                  onChange={(e) => setBenchmarkName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+                  placeholder="e.g. Halfway, Locker, Final"
+                  className="flex-1 min-w-0 bg-ink-900 border border-ink-700 rounded px-2 py-1 outline-none text-sm focus:border-accent-500"
+                />
+              </div>
+            </>
+          )
+        })()}
         <div className="flex items-center justify-end gap-1">
           <button onClick={() => setEditing(false)} className="text-xs text-ink-400 px-2 py-1">Cancel</button>
           <button onClick={save} className="text-xs px-3 py-1.5 rounded-md bg-emerald-500 text-ink-950 font-semibold">Save</button>
@@ -418,12 +429,22 @@ function NamedItemRow({ item, kind, canUp, canDown, onMoveUp, onMoveDown, onSave
         </span>
       )}
       <span className="flex-1 min-w-0 truncate text-sm">{item.name}</span>
-      {isPuzzle && item.benchmark && (
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/40 flex-shrink-0"
-              title={`Benchmark${item.benchmarkName ? ` "${item.benchmarkName}"` : ''}: ${item.benchmark}`}>
-          ⏱ {item.benchmarkName ? `${item.benchmarkName} · ` : ''}{item.benchmark}
-        </span>
-      )}
+      {isPuzzle && item.benchmark && (() => {
+        const valid = parseBenchmark(item.benchmark) != null
+        return (
+          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border flex-shrink-0 ${
+            valid
+              ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/40'
+              : 'bg-rose-500/15 text-rose-300 border-rose-500/50'
+          }`}
+                title={valid
+                  ? `Benchmark${item.benchmarkName ? ` "${item.benchmarkName}"` : ''}: ${item.benchmark}`
+                  : `"${item.benchmark}" can't be parsed — won't render. Edit to fix.`}>
+            ⏱ {item.benchmarkName ? `${item.benchmarkName} · ` : ''}{item.benchmark}
+            {!valid && ' ⚠'}
+          </span>
+        )
+      })()}
       <button onClick={() => setEditing(true)} className="text-xs text-ink-300 active:text-ink-100 px-2 flex-shrink-0">Edit</button>
       <button onClick={onDelete} className="w-7 h-7 rounded-md text-rose-300 active:bg-rose-900/30 flex-shrink-0">✕</button>
     </div>

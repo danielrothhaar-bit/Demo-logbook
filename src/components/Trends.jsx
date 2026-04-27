@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, parseCountdown } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, parseBenchmark } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -522,7 +522,7 @@ function PuzzleSolveTimes({ solveTimes }) {
 // Only renders puzzles where a benchmark was set on the puzzle in Admin.
 function BenchmarksSubsection({ perPuzzle }) {
   const benchmarked = perPuzzle
-    .map(p => ({ ...p, benchmarkSec: parseCountdown(p.benchmark) }))
+    .map(p => ({ ...p, benchmarkSec: parseBenchmark(p.benchmark) }))
     .filter(p => p.benchmarkSec != null)
 
   if (benchmarked.length === 0) return null

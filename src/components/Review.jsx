@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseCountdown, DEMO_TARGET_SEC } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseCountdown, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
@@ -852,7 +852,7 @@ function PuzzleSolveTimelineSection({ puzzles, totalSec }) {
   // Puzzles with a benchmark target (any puzzle, even unsolved) — render as
   // vertical guide lines so designers can see actual solve vs target.
   const benchmarks = (puzzles || [])
-    .map(p => ({ ...p, benchSec: parseCountdown(p.benchmark) }))
+    .map(p => ({ ...p, benchSec: parseBenchmark(p.benchmark) }))
     .filter(p => p.benchSec != null)
   const benchSecById = {}
   for (const b of benchmarks) benchSecById[b.id] = b.benchSec

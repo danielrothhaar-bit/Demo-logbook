@@ -303,5 +303,36 @@ export function parseCountdown(str, targetSec = DEMO_TARGET_SEC) {
   return isOver ? targetSec + total : targetSec - total
 }
 
+// Looser parser for puzzle benchmarks — matches mm:ss countdown form, plus
+// the bare-minute shorthand designers tend to type ("30", "30m", "30 min").
+// Always interpreted as countdown (time remaining); returns elapsed seconds.
+export function parseBenchmark(str, targetSec = DEMO_TARGET_SEC) {
+  if (str == null) return null
+  const trimmed = String(str).trim()
+  if (!trimmed) return null
+  const isOver = trimmed.startsWith('+')
+  const body = (isOver ? trimmed.slice(1) : trimmed).trim()
+
+  // Strict mm:ss
+  let m = body.match(/^(\d{1,3}):(\d{1,2})$/)
+  if (m) {
+    const minutes = parseInt(m[1], 10)
+    const seconds = parseInt(m[2], 10)
+    if (seconds > 59) return null
+    const total = minutes * 60 + seconds
+    return isOver ? targetSec + total : targetSec - total
+  }
+
+  // Bare minutes, optionally with an "m" / "min" / "minutes" suffix
+  m = body.match(/^(\d{1,3})\s*(?:m(?:in(?:ute)?s?)?)?$/i)
+  if (m) {
+    const minutes = parseInt(m[1], 10)
+    const total = minutes * 60
+    return isOver ? targetSec + total : targetSec - total
+  }
+
+  return null
+}
+
 // Re-exported so existing imports keep working
 export { CATEGORY_COLORS, initialsFromName }
