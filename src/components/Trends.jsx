@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown, parseBenchmark } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
 
@@ -152,6 +152,8 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
         </div>
       ) : (
         <>
+          <PuzzleAverageTimeline perPuzzle={solveTimes.perPuzzle} game={game} />
+
           <PuzzleSolveTimes solveTimes={solveTimes} game={game} />
 
           <Leaderboard
@@ -462,6 +464,206 @@ function SplitBar({ negative, positive, neutral }) {
       {negative > 0 && <div className="h-full bg-rose-400" style={{ width: pct(negative) }} />}
       {neutral > 0 && <div className="h-full bg-ink-600" style={{ width: pct(neutral) }} />}
       {positive > 0 && <div className="h-full bg-emerald-400" style={{ width: pct(positive) }} />}
+    </div>
+  )
+}
+
+// Average-solve timeline — mirrors the per-demo timeline in Review, but each
+// dot is positioned at the puzzle's *average* solvedTs across all demos for
+// the active filter. Benchmarks render the same way; dot color flips green/red
+// for benchmarked puzzles depending on whether the avg is within the ±3-min
+// goal window.
+function PuzzleAverageTimeline({ perPuzzle, game }) {
+  const sorted = (perPuzzle || [])
+    .filter(p => p.avgSolvedTs != null)
+    .sort((a, b) => a.avgSolvedTs - b.avgSolvedTs)
+
+  const benchmarks = (perPuzzle || [])
+    .map(p => ({ ...p, benchSec: parseBenchmark(p.benchmark) }))
+    .filter(p => p.benchSec != null)
+  const benchSecById = {}
+  for (const b of benchmarks) benchSecById[b.id] = b.benchSec
+
+  if (!sorted.length && !benchmarks.length) {
+    return (
+      <div>
+        <div className="px-1 mb-2">
+          <div className="text-xs uppercase tracking-wider text-ink-400">Average solve timeline</div>
+          <div className="text-[11px] text-ink-500 mt-0.5">
+            Where each puzzle lands on average across the filtered demos.
+          </div>
+        </div>
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 text-center text-sm text-ink-500">
+          No solve times recorded yet.
+        </div>
+      </div>
+    )
+  }
+
+  const span = Math.max(
+    DEMO_TARGET_SEC,
+    ...sorted.map(p => p.avgSolvedTs),
+    ...benchmarks.map(p => p.benchSec)
+  )
+
+  const TICK_STEP = 600
+  const ticks = []
+  for (let t = 0; t <= span; t += TICK_STEP) ticks.push(t)
+  const showTimerEnd = span >= DEMO_TARGET_SEC
+  const TOLERANCE_SEC = 180
+
+  // Same edge clamp as Review's timeline so chips stay within the card.
+  const chipAlign = (pct) =>
+    pct < 12 ? 'left-0' :
+    pct > 88 ? 'right-0' :
+    'left-1/2 -translate-x-1/2'
+
+  return (
+    <div>
+      <div className="px-1 mb-2">
+        <div className="text-xs uppercase tracking-wider text-ink-400">Average solve timeline</div>
+        <div className="text-[11px] text-ink-500 mt-0.5">
+          Where each puzzle lands on average across the filtered demos.
+        </div>
+      </div>
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-4 space-y-2">
+        <div className="overflow-x-auto sm:overflow-visible no-scrollbar">
+        <div className="min-w-[640px] sm:min-w-0">
+        <div className="relative h-20 mt-6">
+          {/* 10-minute grid ticks */}
+          {ticks.map(t => {
+            if (t === 0 || t > span) return null
+            if (showTimerEnd && t === DEMO_TARGET_SEC) return null
+            const pct = (t / span) * 100
+            return (
+              <div key={`grid-${t}`}
+                className="absolute top-0 bottom-0 w-px bg-ink-700/50"
+                style={{ left: `${pct}%` }}
+              />
+            )
+          })}
+
+          {/* Timer-end marker */}
+          {showTimerEnd && (() => {
+            const timerPct = (DEMO_TARGET_SEC / span) * 100
+            return (
+              <div className="absolute top-0 bottom-0 -translate-x-1/2" style={{ left: `${timerPct}%` }}>
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-rose-500/80" />
+                <div className={`absolute -top-5 ${chipAlign(timerPct)} px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-400/60 text-[9px] font-bold text-rose-200 whitespace-nowrap`}>
+                  ⏰ Timer end
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Center axis bar */}
+          <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-ink-700 rounded-full" />
+
+          {/* Benchmark guide lines */}
+          {benchmarks.map(p => {
+            const pct = Math.min(100, Math.max(0, (p.benchSec / span) * 100))
+            const label = p.benchmarkName || fmtCountdown(p.benchSec)
+            return (
+              <div
+                key={`bench-${p.id}`}
+                className="absolute top-0 bottom-0 -translate-x-1/2"
+                style={{ left: `${pct}%` }}
+              >
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 border-l border-dashed border-yellow-300/70" />
+                <div
+                  className={`absolute top-0 ${chipAlign(pct)} -translate-y-full px-1.5 py-0.5 rounded bg-yellow-500/15 border border-yellow-500/40 text-[10px] font-semibold text-yellow-200 whitespace-nowrap shadow-sm`}
+                  title={`Benchmark · ${p.name} · ${fmtCountdown(p.benchSec)}`}
+                >
+                  ⏱ {label}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Average solve dots — colored vs benchmark when one exists */}
+          {sorted.map((p, i) => {
+            const pct = Math.min(100, Math.max(0, (p.avgSolvedTs / span) * 100))
+            const benchSec = benchSecById[p.id]
+            const hasBench = benchSec != null
+            const onTime = hasBench && Math.abs(p.avgSolvedTs - benchSec) <= TOLERANCE_SEC
+            const dotClass = !hasBench
+              ? 'bg-yellow-400 shadow-yellow-400/30'
+              : onTime
+                ? 'bg-emerald-400 shadow-emerald-400/40'
+                : 'bg-rose-500 shadow-rose-500/40'
+            const deltaLabel = hasBench
+              ? (() => {
+                  const delta = p.avgSolvedTs - benchSec
+                  const abs = Math.abs(delta)
+                  if (abs === 0) return 'on goal'
+                  return `${delta > 0 ? '+' : '−'}${fmtTime(abs)} ${delta > 0 ? 'after' : 'before'} goal`
+                })()
+              : null
+            return (
+              <div
+                key={p.id}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"
+                style={{ left: `${pct}%` }}
+              >
+                <span className={`block w-7 h-7 rounded-full ${dotClass} border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg`}>
+                  {i + 1}
+                </span>
+                <div className={`absolute -top-9 ${chipAlign(pct)} px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl`}>
+                  {p.name}
+                  <span className="text-ink-400 font-mono ml-1">· avg {fmtCountdown(p.avgSolvedTs)}</span>
+                  {p.solvedDemoCount > 0 && (
+                    <span className="text-ink-500 ml-1">({p.solvedDemoCount}×)</span>
+                  )}
+                  {deltaLabel && (
+                    <span className={`ml-1 ${onTime ? 'text-emerald-300' : 'text-rose-300'}`}>· {deltaLabel}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Minute axis */}
+        <div className="relative h-5">
+          {ticks.map(t => {
+            if (t > span) return null
+            const pct = (t / span) * 100
+            const isTimerEnd = showTimerEnd && t === DEMO_TARGET_SEC
+            return (
+              <div key={`label-${t}`}
+                className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                style={{ left: `${pct}%` }}
+              >
+                <span className={`w-px h-1.5 ${isTimerEnd ? 'bg-rose-400' : 'bg-ink-500'}`} />
+                <span className={`text-[10px] font-mono tabular-nums whitespace-nowrap ${
+                  isTimerEnd ? 'text-rose-300 font-semibold' : 'text-ink-400'
+                }`}>
+                  {t / 60}m
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        </div>{/* /min-w */}
+        </div>{/* /overflow-x-auto */}
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-400 pt-1">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" /> avg solve
+          </span>
+          {benchmarks.length > 0 && (
+            <>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> avg within ±3 min of benchmark
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> avg off benchmark by &gt;3 min
+              </span>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
