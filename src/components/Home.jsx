@@ -1,5 +1,5 @@
 import React from 'react'
-import { useStore, fmtTime } from '../store.jsx'
+import { useStore, fmtTime, fmtClockTime } from '../store.jsx'
 
 export default function Home() {
   const { state, dispatch, designerById, gameName } = useStore()
@@ -31,7 +31,7 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{gameName(s.gameId)}</div>
                     <div className="text-sm text-ink-300 mt-0.5">
-                      {s.time && <span>{s.time}</span>}
+                      {s.time && <span>{fmtClockTime(s.time)}</span>}
                       {s.time && <span className="text-ink-500 mx-1.5">·</span>}
                       <span>{s.date}</span>
                     </div>

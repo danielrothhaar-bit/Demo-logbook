@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useStore, fmtTime, DEMO_TARGET_SEC } from '../store.jsx'
+import { useStore, fmtTime, fmtClockTime, DEMO_TARGET_SEC } from '../store.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
 import { autoTagsFromText, matchNamedItems } from '../utils/autoTag.js'
 import MicButton from './MicButton.jsx'
@@ -237,7 +237,7 @@ export default function LiveLogging() {
         <span className="font-semibold text-ink-200">{gameName(activeSession.gameId)}</span>
         {activeSession.time && <>
           <span>·</span>
-          <span>{activeSession.time}</span>
+          <span>{fmtClockTime(activeSession.time)}</span>
         </>}
         <span>·</span>
         <span>team {activeSession.teamSize} · {activeSession.experience}</span>
@@ -706,7 +706,7 @@ function LiveListing() {
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold truncate">{gameName(s.gameId)}</div>
                   <div className="text-sm text-ink-300 mt-0.5">
-                    {s.time && <span>{s.time}</span>}
+                    {s.time && <span>{fmtClockTime(s.time)}</span>}
                     {s.time && <span className="text-ink-500 mx-1.5">·</span>}
                     <span>{s.date}</span>
                   </div>

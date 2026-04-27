@@ -229,6 +229,27 @@ export function fmtTime(sec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
 }
 
+// Render a wall-clock time as 12-hour with am/pm.
+// "14:00" → "2 pm", "14:30" → "2:30 pm", "00:00" → "12 am", "12:00" → "12 pm".
+// Also accepts a Date so callers with timerFirstStartedAt timestamps can reuse it.
+export function fmtClockTime(value) {
+  if (value == null || value === '') return ''
+  if (value instanceof Date) {
+    return formatHM12(value.getHours(), value.getMinutes())
+  }
+  const m = String(value).match(/^(\d{1,2}):(\d{2})/)
+  if (!m) return String(value)
+  return formatHM12(parseInt(m[1], 10), parseInt(m[2], 10))
+}
+
+function formatHM12(h, min) {
+  if (isNaN(h) || isNaN(min)) return ''
+  const period = h >= 12 ? 'pm' : 'am'
+  h = h % 12
+  if (h === 0) h = 12
+  return min === 0 ? `${h} ${period}` : `${h}:${String(min).padStart(2, '0')} ${period}`
+}
+
 // Demo countdown anchor — kept here so reducer + UI agree on the same target.
 export const DEMO_TARGET_SEC = 60 * 60
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { useStore, fmtTime, fmtCountdown } from '../store.jsx'
+import { useStore, fmtTime, fmtCountdown, fmtClockTime } from '../store.jsx'
 import NoteCard from './NoteCard.jsx'
 import NoteEditor from './NoteEditor.jsx'
 import {
@@ -8,8 +8,8 @@ import {
 } from '../utils/synthesis.js'
 
 const TABS = [
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'synthesis', label: 'Synthesis' },
+  { id: 'timeline', label: 'Notes' },
+  { id: 'synthesis', label: 'Timeline' },
   { id: 'summary', label: 'Summary' }
 ]
 
@@ -230,7 +230,7 @@ function SessionPicker() {
                       </span>}
                     </div>
                     <div className="text-sm text-ink-300 mt-0.5">
-                      {s.time && <span>{s.time}</span>}
+                      {s.time && <span>{fmtClockTime(s.time)}</span>}
                       {s.time && <span className="text-ink-500 mx-1.5">·</span>}
                       <span>{s.date}</span>
                     </div>
@@ -358,7 +358,7 @@ function ReviewBody({ session: reviewSession }) {
       {/* Big red Back button — out of the header card */}
       <button
         onClick={() => dispatch({ type: 'OPEN_SESSION_REVIEW', id: null })}
-        className="w-full rounded-2xl bg-rose-500/15 border border-rose-400/40 active:bg-rose-500/25 py-3.5 px-4 flex items-center gap-3 text-rose-100"
+        className="w-full rounded-2xl bg-black border border-black active:bg-ink-900 py-3.5 px-4 flex items-center gap-3 text-white"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="19" y1="12" x2="5" y2="12" />
@@ -463,7 +463,7 @@ function ReviewHeader({ session, totalSec }) {
   const designers = [...new Set(session.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
 
   const startedAtClock = session.timerFirstStartedAt
-    ? new Date(session.timerFirstStartedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    ? fmtClockTime(new Date(session.timerFirstStartedAt))
     : null
 
   const save = () => {
@@ -538,7 +538,7 @@ function ReviewHeader({ session, totalSec }) {
         </div>
 
         <button onClick={removeSession}
-          className="w-full py-3 rounded-xl bg-rose-500/10 border border-rose-500/40 active:bg-rose-500/20 text-rose-200 font-semibold">
+          className="w-full py-3 rounded-xl bg-rose-600 active:bg-rose-700 text-white font-semibold">
           Delete this Demo
         </button>
       </div>
@@ -555,7 +555,7 @@ function ReviewHeader({ session, totalSec }) {
             <span>{session.date}</span>
             {session.time && <>
               <span className="text-ink-500">|</span>
-              <span>{session.time}</span>
+              <span>{fmtClockTime(session.time)}</span>
             </>}
           </div>
 
