@@ -291,6 +291,24 @@ export default function LiveLogging() {
                 <span className="text-[9px] font-medium tracking-wider opacity-75">1 MIN</span>
               </button>
             </div>
+            {/* Fine-tune by 1 second — useful when the demo started a beat
+                late and the countdown needs nudging without a full minute. */}
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <button
+                onClick={() => adjustTimer(-1)}
+                aria-label="Remove one second"
+                className="px-3 py-1 rounded-full bg-ink-700 text-ink-200 active:bg-ink-600 text-[11px] font-mono font-semibold tabular-nums"
+              >
+                −1s
+              </button>
+              <button
+                onClick={() => adjustTimer(1)}
+                aria-label="Add one second"
+                className="px-3 py-1 rounded-full bg-ink-700 text-ink-200 active:bg-ink-600 text-[11px] font-mono font-semibold tabular-nums"
+              >
+                +1s
+              </button>
+            </div>
             <div className={`mt-1 text-[11px] uppercase tracking-wider font-semibold ${
               isOvertime ? 'text-rose-400' : 'text-ink-500'
             }`}>
