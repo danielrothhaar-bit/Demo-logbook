@@ -369,8 +369,11 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
       patch.benchmark = benchmark.trim()
       patch.benchmarkName = benchmarkName.trim()
       // Drop any ids that no longer exist in the current list (defensive).
+      // Allow the special "game_start" sentinel through unfiltered.
       const validIds = new Set(allItems.map(p => p.id))
-      patch.dependsOn = dependsOn.filter(id => id !== item.id && validIds.has(id))
+      patch.dependsOn = dependsOn.filter(id =>
+        id !== item.id && (id === 'game_start' || validIds.has(id))
+      )
     }
     if (isComponent) patch.hasTech = hasTech
     onSave(patch)
@@ -422,7 +425,11 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
                 <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold w-20 flex-shrink-0 pt-2">Available after</span>
                 <div className="flex-1 min-w-0">
                   <AvailableAfterPicker
-                    options={allItems.filter(p => p.id !== item.id)}
+                    options={[
+                      // Virtual prereq: solve clock starts at 60:00 (demo start).
+                      { id: 'game_start', name: 'Game Start', code: '' },
+                      ...allItems.filter(p => p.id !== item.id)
+                    ]}
                     selectedIds={dependsOn}
                     onChange={setDependsOn}
                   />
@@ -481,7 +488,9 @@ function NamedItemRow({ item, kind, allItems = [], canUp, canDown, onMoveUp, onM
       )}
       {isPuzzle && Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && (() => {
         const names = item.dependsOn
-          .map(id => allItems.find(p => p.id === id)?.name)
+          .map(id => id === 'game_start'
+            ? 'Game Start'
+            : allItems.find(p => p.id === id)?.name)
           .filter(Boolean)
         return (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 flex-shrink-0"

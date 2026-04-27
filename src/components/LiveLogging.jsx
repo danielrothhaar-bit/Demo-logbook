@@ -26,7 +26,7 @@ const ACCENT = {
   orange:  { btn: 'bg-orange-500 active:bg-orange-600 text-white',      dot: 'bg-orange-400' },
   yellow:  { btn: 'bg-yellow-400 active:bg-yellow-500 text-ink-950',    dot: 'bg-yellow-300' },
   cyan:    { btn: 'bg-cyan-400 active:bg-cyan-500 text-ink-950',        dot: 'bg-cyan-300' },
-  grey:    { btn: 'bg-ink-600 active:bg-ink-500 text-ink-100',          dot: 'bg-ink-400' },
+  grey:    { btn: 'bg-ink-300 active:bg-ink-400 text-ink-950',          dot: 'bg-ink-300' },
   rose:    { btn: 'bg-rose-600 active:bg-rose-700 text-white',          dot: 'bg-rose-400' },
   violet:  { btn: 'bg-violet-400 active:bg-violet-500 text-ink-950',    dot: 'bg-violet-400' }
 }
@@ -145,12 +145,18 @@ export default function LiveLogging() {
         text = payload.photoUrl ? '(photo)' : '(note)'
       }
     }
+    const categories = action.tag ? [action.tag] : []
+    // Auto-add the SFX tag whenever the note's text mentions "SFX" (word
+    // boundary, case-insensitive). Designers don't have a button for it.
+    if (/\bsfx\b/i.test(text) && !categories.includes('SFX')) {
+      categories.push('SFX')
+    }
     dispatch({
       type: 'ADD_NOTE',
       sessionId: activeSession.id,
       designerId: activeDesigner.id,
       timestamp: currentSec,
-      categories: action.tag ? [action.tag] : [],
+      categories,
       puzzleIds: payload.puzzleIds || [],
       componentIds: payload.componentIds || [],
       text,
@@ -210,12 +216,14 @@ export default function LiveLogging() {
             const text = (sr.finalTranscript || draft).trim()
             const audioUrl = await stopAudioRecording({ keep: true })
             if (text || audioUrl) {
+              const cats = ['Feedback Discussion']
+              if (/\bsfx\b/i.test(text)) cats.push('SFX')
               dispatch({
                 type: 'ADD_NOTE',
                 sessionId: activeSession.id,
                 designerId: activeDesigner.id,
                 timestamp: currentSec,
-                categories: ['Feedback Discussion'],
+                categories: cats,
                 puzzleIds: [],
                 componentIds: [],
                 text,

@@ -225,7 +225,8 @@ export function analyzePuzzles(notes, game) {
     let baselineTs = firstTouchTs
     if (dependsOn.length > 0 && solvedTs != null) {
       const usablePrereqSolves = dependsOn
-        .map(id => factsById.get(id)?.solvedTs)
+        // 'game_start' is a virtual prereq pinned to demo start (elapsed 0).
+        .map(id => id === 'game_start' ? 0 : factsById.get(id)?.solvedTs)
         .filter(t => t != null && t < solvedTs)
       if (usablePrereqSolves.length > 0) {
         baselineTs = Math.max(...usablePrereqSolves)

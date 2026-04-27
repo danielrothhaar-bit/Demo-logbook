@@ -14,7 +14,8 @@ const ACTION_TAGS = [
   'Wow Moment',
   'Frustration',
   'Hint',
-  'Clue'
+  'Clue',
+  'SFX'
 ]
 
 export default function NoteEditor({ note, sessionId, onClose }) {

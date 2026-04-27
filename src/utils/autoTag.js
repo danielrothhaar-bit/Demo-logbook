@@ -17,7 +17,8 @@ const RULES = [
   { tag: 'Frustration',        patterns: [/\bfrustrat(?:ed|ion|ing)\b/, /\bgave\s+up\b/, /\bstuck\b(?!\s+(?:open|closed|on|off))/, /\bannoyed\b/, /\blost\b/, /\bconfused\b/] },
   { tag: 'Hint',               patterns: [/\bhint(?:ed|ing)?\b/, /\bgm\s+helped\b/, /\bgame\s*master\s+helped\b/] },
   { tag: 'Clue',               patterns: [/\bclue\b/, /\bmissed\s+(?:the\s+)?clue\b/, /\bovers?aw\s+(?:the\s+)?clue\b/, /\bspotted\s+(?:the\s+)?clue\b/] },
-  { tag: 'Puzzle Solved',      patterns: [/\bpuzzle\s+solved\b/, /\bsolved\s+it\b/, /\bgot\s+it\b/, /\bcracked\s+(?:it|the)\b/, /\bfigured\s+(?:it\s+)?out\b/] }
+  { tag: 'Puzzle Solved',      patterns: [/\bpuzzle\s+solved\b/, /\bsolved\s+it\b/, /\bgot\s+it\b/, /\bcracked\s+(?:it|the)\b/, /\bfigured\s+(?:it\s+)?out\b/] },
+  { tag: 'SFX',                patterns: [/\bsfx\b/] }
   // Feedback Discussion is intentionally NOT auto-tagged — it's a user-driven mode.
 ]
 
