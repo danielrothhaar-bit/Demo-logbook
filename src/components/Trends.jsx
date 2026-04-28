@@ -367,6 +367,8 @@ function DemoStats({ game, agg }) {
     <CollapsibleSection title={game.name} hint={`${agg.total} demo${agg.total === 1 ? '' : 's'} logged`}>
       <div className="flex flex-wrap gap-x-8 gap-y-3">
         <Stat label="Demos logged" value={String(agg.total)} />
+        <Stat label="Wins" value={String(agg.wins || 0)} accent="emerald" />
+        <Stat label="Losses" value={String(agg.losses || 0)} accent="rose" />
         <Stat label="Avg duration" value={agg.avgDuration ? fmtTime(agg.avgDuration) : '—'} />
         <Stat label="Avg hints / demo" value={avgHints} accent="amber" />
         <Stat label="Avg clues / demo" value={avgClues} accent="yellow" />
@@ -381,7 +383,9 @@ function DemoStats({ game, agg }) {
 const STAT_ACCENT = {
   default: 'text-ink-50',
   amber:   'text-amber-300',
-  yellow:  'text-yellow-300'
+  yellow:  'text-yellow-300',
+  emerald: 'text-emerald-300',
+  rose:    'text-rose-300'
 }
 
 function Stat({ label, value, accent = 'default' }) {
@@ -782,12 +786,6 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-800 text-ink-300 border border-ink-700 tabular-nums">{p.code}</span>
           )}
           <span className="font-semibold text-sm text-ink-50 truncate flex-1">{p.name}</span>
-          {goalSec != null && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 font-medium tabular-nums"
-                  title={`Goal solve time: ${p.goalMinutes} min`}>
-              🎯 {p.goalMinutes}m
-            </span>
-          )}
           <span className="text-[11px] text-ink-300 tabular-nums">
             {allSolves.length > 0 ? `${allSolves.length} solve${allSolves.length === 1 ? '' : 's'}` : 'no solves'}
           </span>
@@ -799,6 +797,9 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
           </svg>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
+          {goalSec != null && (
+            <SolveCell label="🎯 Goal" value={goalSec} colorClass="text-emerald-300" />
+          )}
           <SolveCell label="Avg" value={p.avgSolveTime} colorClass={avgClass} />
           <SolveCell label="Fastest" value={p.fastestSolve} colorClass="text-ink-50" />
           <SolveCell label="Slowest" value={p.slowestSolve} colorClass="text-ink-50" />

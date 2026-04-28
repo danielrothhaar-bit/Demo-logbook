@@ -599,6 +599,11 @@ export function aggregateAcrossSessions(sessions, gameId) {
   const componentStats = {}
   let totalDuration = 0
   let totalNotes = 0
+  let wins = 0
+  let losses = 0
+  // 60-minute demo target. Mirrors DEMO_TARGET_SEC in store.jsx; pulled inline
+  // here so synthesis stays React-free and importable from the server.
+  const DEMO_LIMIT_SEC = 60 * 60
   const dates = []
 
   const ensure = (bucket, id) => {
@@ -616,6 +621,12 @@ export function aggregateAcrossSessions(sessions, gameId) {
   for (const sess of relevant) {
     totalDuration += sess.timerElapsed || 0
     if (sess.date) dates.push(sess.date)
+    // Tally outcomes for ended demos: under 60 min is a win, otherwise a loss.
+    // In-progress demos aren't counted in either bucket.
+    if (sess.ended) {
+      if ((sess.timerElapsed || 0) < DEMO_LIMIT_SEC) wins++
+      else losses++
+    }
 
     for (const n of sess.notes) {
       if (n.kind === 'feedback') continue
@@ -658,7 +669,9 @@ export function aggregateAcrossSessions(sessions, gameId) {
     dateRange: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null,
     categoryCounts,
     puzzleStats,
-    componentStats
+    componentStats,
+    wins,
+    losses
   }
 }
 
