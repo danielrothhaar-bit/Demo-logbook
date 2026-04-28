@@ -347,15 +347,17 @@ export default function LiveLogging() {
                 }}
                 className="px-4 py-3 rounded-full bg-ink-700 text-ink-100 font-medium active:bg-ink-600"
               >Reset</button>
-              <button
-                onClick={() => {
-                  if (confirm('Finish this demo and move to review?')) {
-                    dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
-                    dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
-                  }
-                }}
-                className="px-4 py-3 rounded-full bg-emerald-500 text-ink-950 font-semibold active:bg-emerald-600"
-              >Finish Demo</button>
+              {!activeSession.timerRunning && (
+                <button
+                  onClick={() => {
+                    if (confirm('Finish this demo and move to review?')) {
+                      dispatch({ type: 'END_SESSION', sessionId: activeSession.id })
+                      dispatch({ type: 'OPEN_SESSION_REVIEW', id: activeSession.id })
+                    }
+                  }}
+                  className="px-4 py-3 rounded-full bg-emerald-500 text-ink-950 font-semibold active:bg-emerald-600"
+                >Finish Demo</button>
+              )}
             </div>
           </div>
 
