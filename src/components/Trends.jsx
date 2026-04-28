@@ -867,11 +867,11 @@ function BenchmarksSubsection({ perPuzzle }) {
   if (benchmarked.length === 0) return null
 
   return (
-    <div className="pt-3 mt-1 border-t border-ink-700 space-y-1.5">
-      <div className="text-sm font-bold text-yellow-300 flex items-center gap-1.5">
+    <div className="pt-3 mt-1 border-t border-ink-700 space-y-2">
+      <div className="text-base font-bold text-yellow-300 flex items-center gap-1.5">
         <span>⏱</span> Benchmarks
       </div>
-      <div className="text-xs text-ink-200 -mt-1">
+      <div className="text-sm text-ink-200 -mt-1">
         Target solve time vs averaged actual across demos. Negative delta = team is ahead of the benchmark.
       </div>
       {benchmarked.map(p => {
@@ -879,29 +879,29 @@ function BenchmarksSubsection({ perPuzzle }) {
         const delta = hasAvg ? p.avgSolvedTs - p.benchmarkSec : null
         const ahead = delta != null && delta < 0
         return (
-          <div key={p.id} className="rounded-lg bg-ink-900 border border-yellow-500/30 p-2.5">
+          <div key={p.id} className="rounded-lg bg-ink-900 border border-yellow-500/30 p-3">
             <div className="flex items-center gap-2 flex-wrap">
               {p.code && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-800 text-ink-400 border border-ink-700 tabular-nums">{p.code}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-ink-800 text-ink-300 border border-ink-700 tabular-nums">{p.code}</span>
               )}
-              <span className="font-semibold text-sm text-ink-100 truncate">{p.name}</span>
+              <span className="font-semibold text-base text-ink-50 truncate">{p.name}</span>
               {p.benchmarkName && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/40 font-medium">
+                <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/15 text-yellow-200 border border-yellow-500/40 font-medium">
                   ⏱ {p.benchmarkName}
                 </span>
               )}
-              <span className="tabular-nums text-[11px] text-yellow-300">target {fmtCountdown(p.benchmarkSec)}</span>
+              <span className="tabular-nums text-sm font-semibold text-yellow-300">target {fmtCountdown(p.benchmarkSec)}</span>
             </div>
-            <div className="text-[11px] mt-1 tabular-nums flex items-center gap-2 flex-wrap">
+            <div className="text-sm mt-1.5 tabular-nums flex items-center gap-2 flex-wrap">
               {hasAvg ? (
                 <>
-                  <span className="text-ink-400">avg solved {fmtCountdown(p.avgSolvedTs)} ({p.solvedDemoCount} demo{p.solvedDemoCount === 1 ? '' : 's'})</span>
-                  <span className={ahead ? 'text-emerald-300' : delta === 0 ? 'text-ink-300' : 'text-rose-300'}>
+                  <span className="text-ink-200">avg solved {fmtCountdown(p.avgSolvedTs)} ({p.solvedDemoCount} demo{p.solvedDemoCount === 1 ? '' : 's'})</span>
+                  <span className={`font-semibold ${ahead ? 'text-emerald-300' : delta === 0 ? 'text-ink-300' : 'text-rose-300'}`}>
                     {delta === 0 ? 'on target' : `${ahead ? '−' : '+'}${fmtTime(Math.abs(delta))} ${ahead ? 'ahead' : 'behind'}`}
                   </span>
                 </>
               ) : (
-                <span className="text-ink-500 italic">not solved yet in any demo</span>
+                <span className="text-ink-300 italic">not solved yet in any demo</span>
               )}
             </div>
           </div>
