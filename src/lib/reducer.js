@@ -174,7 +174,7 @@ function seedActionItems(sessions) {
 // ------- Initial state -------
 
 // Persisted slice: what the server keeps in the volume.
-export const PERSISTED_KEYS = ['designers', 'categories', 'games', 'sessions', 'actionItems', 'hiddenNoteIds']
+export const PERSISTED_KEYS = ['designers', 'categories', 'games', 'sessions', 'actionItems', 'hiddenNoteIds', 'cluesetNoteIds']
 
 export function initialPersistedState() {
   const games = seedGames()
@@ -185,7 +185,8 @@ export function initialPersistedState() {
     games,
     sessions,
     actionItems: seedActionItems(sessions),
-    hiddenNoteIds: []
+    hiddenNoteIds: [],
+    cluesetNoteIds: []
   }
 }
 
@@ -285,6 +286,7 @@ export function reducer(state, action) {
         }))
       }))
       next.hiddenNoteIds = Array.isArray(next.hiddenNoteIds) ? next.hiddenNoteIds : []
+      next.cluesetNoteIds = Array.isArray(next.cluesetNoteIds) ? next.cluesetNoteIds : []
       next.actionItems = (next.actionItems || []).map(a => ({
         ...a,
         sourceNoteId: a.sourceNoteId || null
@@ -545,6 +547,20 @@ export function reducer(state, action) {
       return {
         ...state,
         hiddenNoteIds: (state.hiddenNoteIds || []).filter(id => id !== action.noteId)
+      }
+
+    // Mark a Clue/Hint note as already added to the clueset. The Clues/Hints
+    // digest auto-hides marked notes so designers can chip away at the
+    // backlog; toggle back via UNMARK_CLUESET.
+    case 'MARK_CLUESET': {
+      const set = new Set(state.cluesetNoteIds || [])
+      set.add(action.noteId)
+      return { ...state, cluesetNoteIds: [...set] }
+    }
+    case 'UNMARK_CLUESET':
+      return {
+        ...state,
+        cluesetNoteIds: (state.cluesetNoteIds || []).filter(id => id !== action.noteId)
       }
 
     default:

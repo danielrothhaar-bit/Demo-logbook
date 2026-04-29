@@ -7,6 +7,7 @@ const PAGES = [
   { id: 'trends',  label: 'Puzzle Trends' },
   { id: 'tech',    label: 'Tech Issues' },
   { id: 'changes', label: 'Game Changes' },
+  { id: 'clues',   label: 'Clues/Hints' },
   { id: 'photos',  label: 'Team Photos' }
 ]
 
@@ -47,6 +48,8 @@ export default function Trends() {
           groupBy="puzzle"
           emptyHint="Game Change notes from any demo will show up here, grouped by the puzzle they're tagged with."
         />
+      ) : page === 'clues' ? (
+        <ClueHintDigest />
       ) : games.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
           <div className="font-semibold mb-1">No games yet</div>
@@ -1325,6 +1328,375 @@ function HiddenRow({ row, designer, onRestore, onOpen }) {
       >
         ↺ Restore
       </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// Clues/Hints digest — every Clue or Hint note across all sessions, grouped by
+// the puzzle they're tagged with (rows tagged with no puzzle fall into an
+// "Untagged" bucket). Each row carries an "Added to Clueset" yes/no toggle so
+// the team can keep ticking off real-world clues that already made it into
+// the in-game clueset; rows marked Yes hide by default until the toolbar
+// toggle flips them back on.
+// ============================================================================
+
+const CLUE_CATEGORIES = ['Clue', 'Hint']
+
+function ClueHintDigest() {
+  const { state, dispatch, gameById, designerById } = useStore()
+  const [filterGameId, setFilterGameId] = useState('all')
+  const [showAdded, setShowAdded] = useState(false)
+
+  const cluesetSet = useMemo(() => new Set(state.cluesetNoteIds || []), [state.cluesetNoteIds])
+
+  // Pull every Clue / Hint note across all sessions, then split by whether
+  // it's already in the clueset. We keep both lists so the toolbar can show
+  // an accurate count and the show-added toggle can re-surface them.
+  const { rows, addedRows } = useMemo(() => {
+    const visible = []
+    const added = []
+    for (const s of state.sessions) {
+      if (filterGameId !== 'all' && s.gameId !== filterGameId) continue
+      const game = gameById(s.gameId)
+      for (const n of s.notes) {
+        const cats = n.categories || []
+        if (!cats.some(c => CLUE_CATEGORIES.includes(c))) continue
+        const row = {
+          noteId:       n.id,
+          sessionId:    s.id,
+          sessionDate:  s.date,
+          sessionTime:  s.time,
+          gameId:       s.gameId,
+          gameName:     game?.name || '(deleted game)',
+          designerId:   n.designerId,
+          timestamp:    n.timestamp,
+          text:         n.text,
+          puzzleIds:    n.puzzleIds || [],
+          isClue:       cats.includes('Clue'),
+          isHint:       cats.includes('Hint')
+        }
+        if (cluesetSet.has(n.id)) added.push(row)
+        else visible.push(row)
+      }
+    }
+    return { rows: visible, addedRows: added }
+  }, [state.sessions, filterGameId, cluesetSet, gameById])
+
+  // Group strictly by puzzle. Building the puzzle universe from the games in
+  // scope keeps cross-game noise out of the "All games" view.
+  const groups = useMemo(() => {
+    const inScope = filterGameId === 'all' ? rows : rows.filter(r => r.gameId === filterGameId)
+    const allInScope = filterGameId === 'all' ? [...rows, ...addedRows] : [...rows, ...addedRows].filter(r => r.gameId === filterGameId)
+    return groupClueRows(inScope, allInScope, showAdded ? addedRows : [], state.games, filterGameId, cluesetSet)
+  }, [rows, addedRows, state.games, filterGameId, showAdded, cluesetSet])
+
+  // Game tabs: only games that have at least one Clue or Hint note.
+  const relevantGames = useMemo(() => {
+    const ids = new Set()
+    for (const s of state.sessions) {
+      if (s.notes.some(n => (n.categories || []).some(c => CLUE_CATEGORIES.includes(c)))) {
+        ids.add(s.gameId)
+      }
+    }
+    return [...ids]
+      .map(id => gameById(id))
+      .filter(Boolean)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  }, [state.sessions, gameById])
+
+  const toggleClueset = (row) => {
+    const inClueset = cluesetSet.has(row.noteId)
+    dispatch({
+      type: inClueset ? 'UNMARK_CLUESET' : 'MARK_CLUESET',
+      noteId: row.noteId
+    })
+  }
+
+  const openSession = (sessionId) => dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
+
+  if (rows.length === 0 && addedRows.length === 0) {
+    return (
+      <div className="rounded-2xl bg-ink-800 border border-ink-700 p-6 text-center">
+        <div className="text-3xl mb-2">💡</div>
+        <div className="font-semibold mb-1">No clue or hint notes yet</div>
+        <div className="text-sm text-ink-400 leading-relaxed">
+          Tag notes with Clue or Hint during a demo to track them here, grouped by the puzzle they belong to.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {relevantGames.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
+          <button
+            onClick={() => setFilterGameId('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+              filterGameId === 'all'
+                ? 'bg-accent-500 border-accent-500 text-ink-50'
+                : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
+            }`}
+          >All games</button>
+          {relevantGames.map(g => (
+            <button
+              key={g.id}
+              onClick={() => setFilterGameId(g.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+                filterGameId === g.id
+                  ? 'bg-accent-500 border-accent-500 text-ink-50'
+                  : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
+              }`}
+            >{g.name}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Show-added toggle. The whole row is the toggle so it's a fat tap target. */}
+      <button
+        onClick={() => setShowAdded(v => !v)}
+        className={`w-full rounded-2xl border px-3 py-2.5 flex items-center gap-3 text-left transition-colors ${
+          showAdded
+            ? 'bg-emerald-500/10 border-emerald-500/40 active:bg-emerald-500/20'
+            : 'bg-ink-800 border-ink-700 active:bg-ink-700'
+        }`}
+      >
+        <span className={`w-9 h-5 rounded-full p-0.5 flex-shrink-0 transition-colors ${
+          showAdded ? 'bg-emerald-400' : 'bg-ink-600'
+        }`}>
+          <span className={`block w-4 h-4 rounded-full bg-ink-50 transition-transform ${
+            showAdded ? 'translate-x-4' : 'translate-x-0'
+          }`} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-ink-50">
+            {showAdded ? 'Showing added to clueset' : 'Hide added to clueset'}
+          </div>
+          <div className="text-[11px] text-ink-400">
+            {addedRows.length === 0
+              ? 'Nothing in the clueset yet'
+              : `${addedRows.length} note${addedRows.length === 1 ? '' : 's'} marked added`}
+          </div>
+        </div>
+      </button>
+
+      {groups.length === 0 ? (
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-sm text-ink-400">
+          {addedRows.length > 0 && !showAdded
+            ? <>All clue/hint notes are marked added. <button onClick={() => setShowAdded(true)} className="text-accent-400 active:text-accent-500">Show them</button>.</>
+            : 'No clue or hint notes for this game.'}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {groups.map(group => (
+            <CluePuzzleGroup
+              key={group.key}
+              group={group}
+              cluesetSet={cluesetSet}
+              designerById={designerById}
+              onToggleClueset={toggleClueset}
+              onOpenSession={openSession}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+// Build per-puzzle groups. `visibleRows` are the rows that should always
+// render (not in clueset). `extraRows` are rows in clueset that also render
+// because the show-added toggle is on. Counts in summary always reflect the
+// visible-only set so the headline number matches what's collapsed inside.
+function groupClueRows(visibleRows, allRowsInScope, extraRows, games, filterGameId, cluesetSet) {
+  // Build the puzzle universe under the active game scope.
+  const puzzleMap = new Map() // id → { id, name, code, gameId, gameName }
+  const inScopeGames = filterGameId === 'all' ? games : games.filter(g => g.id === filterGameId)
+  for (const g of inScopeGames) {
+    for (const p of g.puzzles || []) {
+      puzzleMap.set(p.id, { id: p.id, name: p.name, code: p.code || '', gameId: g.id, gameName: g.name })
+    }
+  }
+
+  // Bucket: puzzleId → { item, visible, added }
+  const buckets = new Map()
+  const untagged = { visible: [], added: [] }
+
+  const addRow = (row, target) => {
+    const valid = (row.puzzleIds || []).filter(id => puzzleMap.has(id))
+    if (valid.length === 0) {
+      untagged[target].push(row)
+      return
+    }
+    for (const id of valid) {
+      if (!buckets.has(id)) {
+        buckets.set(id, { item: puzzleMap.get(id), visible: [], added: [] })
+      }
+      buckets.get(id)[target].push(row)
+    }
+  }
+
+  for (const r of visibleRows) addRow(r, 'visible')
+  for (const r of extraRows)   addRow(r, 'added')
+
+  // Only emit groups that have at least one row visible right now (visible
+  // means "not in clueset"; added means "in clueset and toggle is on").
+  const groups = []
+  for (const b of buckets.values()) {
+    if (b.visible.length === 0 && b.added.length === 0) continue
+    groups.push({
+      key:       b.item.id,
+      title:     b.item.name,
+      code:      b.item.code,
+      gameName:  b.item.gameName,
+      visible:   sortRows(b.visible),
+      added:     sortRows(b.added)
+    })
+  }
+  if (untagged.visible.length || untagged.added.length) {
+    groups.push({
+      key:       '__untagged__',
+      title:     'Untagged',
+      code:      '',
+      gameName:  '',
+      visible:   sortRows(untagged.visible),
+      added:     sortRows(untagged.added)
+    })
+  }
+
+  // Sort: most visible-rows first (where the work is), ties by name.
+  groups.sort((a, b) => b.visible.length - a.visible.length || a.title.localeCompare(b.title))
+  return groups
+}
+
+function sortRows(rows) {
+  return rows.slice().sort((a, b) =>
+    (b.sessionDate || '').localeCompare(a.sessionDate || '') ||
+    (b.timestamp - a.timestamp)
+  )
+}
+
+// One puzzle's collapsible card. Closed by default; the headline counts only
+// "visible" rows (not in clueset) so the number matches what'll appear inside.
+function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onOpenSession }) {
+  return (
+    <details className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+      <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+            {group.code && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-900 text-ink-400 border border-ink-700 tabular-nums">
+                {group.code}
+              </span>
+            )}
+            <span className="font-semibold text-ink-50">{group.title}</span>
+            {group.gameName && group.key !== '__untagged__' && (
+              <span className="text-[11px] text-ink-400">· {group.gameName}</span>
+            )}
+          </div>
+          <div className="text-[11px] text-ink-400 mt-0.5 tabular-nums">
+            {group.visible.length} note{group.visible.length === 1 ? '' : 's'}
+            {group.added.length > 0 && (
+              <span className="text-ink-500"> · {group.added.length} in clueset</span>
+            )}
+          </div>
+        </div>
+        <svg className="w-4 h-4 text-ink-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </summary>
+      <div className="px-3 pb-3 space-y-2">
+        {group.visible.length === 0 && group.added.length === 0 && (
+          <div className="text-xs text-ink-500 px-1 py-1">No notes.</div>
+        )}
+        {group.visible.map(row => (
+          <ClueRow
+            key={row.noteId}
+            row={row}
+            inClueset={false}
+            designer={designerById(row.designerId)}
+            onToggleClueset={() => onToggleClueset(row)}
+            onOpenSession={() => onOpenSession(row.sessionId)}
+          />
+        ))}
+        {group.added.map(row => (
+          <ClueRow
+            key={row.noteId}
+            row={row}
+            inClueset={true}
+            designer={designerById(row.designerId)}
+            onToggleClueset={() => onToggleClueset(row)}
+            onOpenSession={() => onOpenSession(row.sessionId)}
+          />
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function ClueRow({ row, inClueset, designer, onToggleClueset, onOpenSession }) {
+  const tagBadge = row.isClue && row.isHint
+    ? { label: 'Clue + Hint', class: 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' }
+    : row.isHint
+      ? { label: 'Hint',      class: 'bg-violet-500/15 border-violet-500/40 text-violet-200' }
+      : { label: 'Clue',      class: 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' }
+
+  return (
+    <div className={`rounded-xl border p-3 space-y-2 ${
+      inClueset ? 'bg-ink-900/60 border-emerald-500/30 opacity-80' : 'bg-ink-900 border-ink-700'
+    }`}>
+      <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums flex-wrap">
+        <span className="font-mono">{fmtCountdown(row.timestamp)}</span>
+        {designer && (
+          <span className="font-bold" style={{ color: designer.color }}>{designer.initials}</span>
+        )}
+        <span className="text-ink-500">·</span>
+        <button
+          onClick={onOpenSession}
+          className="truncate text-left active:text-accent-400 hover:text-accent-400 underline-offset-2 hover:underline"
+        >
+          {row.gameName} · {row.sessionDate}
+        </button>
+        <span className={`ml-auto text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full border ${tagBadge.class}`}>
+          {tagBadge.label}
+        </span>
+      </div>
+      <div className="text-sm text-ink-100 leading-snug break-words">{row.text}</div>
+      <ClusetToggle inClueset={inClueset} onChange={onToggleClueset} />
+    </div>
+  )
+}
+
+// Yes/No segmented toggle. Yes-state colors emerald so it reads as "done";
+// No-state stays neutral. Tapping the inactive side flips the row.
+function ClusetToggle({ inClueset, onChange }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">
+        Added to Clueset
+      </span>
+      <div className="flex bg-ink-950 border border-ink-700 rounded-full p-0.5 ml-auto">
+        <button
+          onClick={() => { if (inClueset) onChange() }}
+          className={`px-3 py-1 rounded-full text-[11px] font-bold transition-colors ${
+            !inClueset
+              ? 'bg-ink-700 text-ink-50'
+              : 'text-ink-400 active:text-ink-200'
+          }`}
+          aria-pressed={!inClueset}
+        >No</button>
+        <button
+          onClick={() => { if (!inClueset) onChange() }}
+          className={`px-3 py-1 rounded-full text-[11px] font-bold transition-colors ${
+            inClueset
+              ? 'bg-emerald-500 text-ink-950'
+              : 'text-ink-400 active:text-ink-200'
+          }`}
+          aria-pressed={inClueset}
+        >Yes</button>
+      </div>
     </div>
   )
 }

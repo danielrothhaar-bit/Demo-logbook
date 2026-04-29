@@ -20,6 +20,7 @@ function clientInitialState() {
     sessions: [],
     actionItems: [],
     hiddenNoteIds: [],
+    cluesetNoteIds: [],
     activeDesignerId: null,
     activeSessionId: null,
     reviewSessionId: null,
