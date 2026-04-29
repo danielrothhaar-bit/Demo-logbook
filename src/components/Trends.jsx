@@ -2,12 +2,23 @@ import React, { useMemo, useState } from 'react'
 import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
+import NoteEditor from './NoteEditor.jsx'
+import ActionItems from './ActionItems.jsx'
+
+// Distinct clue/hint colors used across all clue/hint UI in Trends. The
+// global CATEGORY_COLORS for these two are both yellow-ish, which makes
+// stacked bars + per-row coloring blend together — locally we lean on yellow
+// for clues and violet for hints (matching the Live action button accents)
+// so the two are immediately distinguishable.
+const CLUE_COLOR = '#facc15'
+const HINT_COLOR = '#a78bfa'
 
 const PAGES = [
   { id: 'trends',  label: 'Puzzle Trends' },
   { id: 'tech',    label: 'Tech Issues' },
   { id: 'changes', label: 'Game Changes' },
   { id: 'clues',   label: 'Clues/Hints' },
+  { id: 'actions', label: 'Action Items' },
   { id: 'photos',  label: 'Team Photos' }
 ]
 
@@ -50,6 +61,8 @@ export default function Trends() {
         />
       ) : page === 'clues' ? (
         <ClueHintDigest />
+      ) : page === 'actions' ? (
+        <ActionItems embedded />
       ) : games.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
           <div className="font-semibold mb-1">No games yet</div>
@@ -201,10 +214,17 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
           </CollapsibleSection>
 
           <CollapsibleSection
+            title="Clues and Hints"
+            hint="Stacked total per puzzle, sorted by most asks first."
+          >
+            <CluesHintsBarChart game={game} puzzleStats={agg.puzzleStats} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
             title="Puzzle solve times"
             hint="Average, fastest, and slowest solve per puzzle."
           >
-            <PuzzleSolveTimes solveTimes={solveTimes} game={game} />
+            <PuzzleSolveTimes solveTimes={solveTimes} game={game} puzzleStats={agg.puzzleStats} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -743,7 +763,7 @@ function PuzzleAverageTimeline({ perPuzzle, game }) {
   )
 }
 
-function PuzzleSolveTimes({ solveTimes, game }) {
+function PuzzleSolveTimes({ solveTimes, game, puzzleStats }) {
   const { perPuzzle, overallAvg, totalSolveEvents, avgGapBetween } = solveTimes
 
   // Reorder per the game's puzzle list (i.e. the order set in Admin) so the
@@ -773,7 +793,12 @@ function PuzzleSolveTimes({ solveTimes, game }) {
 
       <div className="space-y-1.5 pt-1">
         {ordered.map(p => (
-          <PuzzleSolveRow key={p.id} puzzle={p} maxAvg={maxAvg} />
+          <PuzzleSolveRow
+            key={p.id}
+            puzzle={p}
+            maxAvg={maxAvg}
+            stats={puzzleStats?.[p.id]}
+          />
         ))}
       </div>
 
@@ -782,7 +807,7 @@ function PuzzleSolveTimes({ solveTimes, game }) {
   )
 }
 
-function PuzzleSolveRow({ puzzle: p, maxAvg }) {
+function PuzzleSolveRow({ puzzle: p, maxAvg, stats }) {
   const { dispatch } = useStore()
   const hasAvg = p.avgSolveTime != null
   const widthPct = hasAvg ? Math.max(8, (p.avgSolveTime / maxAvg) * 100) : 0
@@ -808,6 +833,8 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
     }
   }
   const allSolves = p.solves || []
+  const clueCount = stats?.perCategory?.Clue || 0
+  const hintCount = stats?.perCategory?.Hint || 0
 
   const openDemo = (sessionId) => {
     dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
@@ -821,6 +848,24 @@ function PuzzleSolveRow({ puzzle: p, maxAvg }) {
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-800 text-ink-300 border border-ink-700 tabular-nums">{p.code}</span>
           )}
           <span className="font-semibold text-sm text-ink-50 truncate flex-1">{p.name}</span>
+          {(clueCount > 0 || hintCount > 0) && (
+            <span className="flex items-center gap-1 tabular-nums">
+              {clueCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold border"
+                      style={{ backgroundColor: `${CLUE_COLOR}22`, color: CLUE_COLOR, borderColor: `${CLUE_COLOR}55` }}
+                      title={`${clueCount} clue${clueCount === 1 ? '' : 's'}`}>
+                  💡 {clueCount}
+                </span>
+              )}
+              {hintCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold border"
+                      style={{ backgroundColor: `${HINT_COLOR}22`, color: HINT_COLOR, borderColor: `${HINT_COLOR}55` }}
+                      title={`${hintCount} hint${hintCount === 1 ? '' : 's'}`}>
+                  🤝 {hintCount}
+                </span>
+              )}
+            </span>
+          )}
           <span className="text-[11px] text-ink-300 tabular-nums">
             {allSolves.length > 0 ? `${allSolves.length} solve${allSolves.length === 1 ? '' : 's'}` : 'no solves'}
           </span>
@@ -966,9 +1011,21 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
   const { state, dispatch, gameById, designerById, gameName } = useStore()
   const [filterGameId, setFilterGameId] = useState('all')
   const [showHidden, setShowHidden] = useState(false)
+  // editNote holds { note, sessionId } when the user taps a row's edit pencil.
+  // The NoteEditor modal is rendered at the bottom of the digest.
+  const [editNote, setEditNote] = useState(null)
 
   const tone = ISSUE_TONE[kind] || ISSUE_TONE.tech
   const hiddenSet = useMemo(() => new Set(state.hiddenNoteIds || []), [state.hiddenNoteIds])
+
+  // Resolve the live note off state when the editor opens, so edits land on
+  // the freshest version (the row may have been mutated by another device).
+  const editTarget = useMemo(() => {
+    if (!editNote) return null
+    const sess = state.sessions.find(s => s.id === editNote.sessionId)
+    const note = sess?.notes.find(n => n.id === editNote.noteId)
+    return note ? { note, sessionId: editNote.sessionId } : null
+  }, [editNote, state.sessions])
 
   // Build the flat list of notes that match the category + game filter, then
   // partition by visibility. Each row carries its session metadata so the
@@ -1043,6 +1100,7 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
 
   const goToActions = () => dispatch({ type: 'SET_MODE', mode: 'actionItems' })
   const openSession = (sessionId) => dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
+  const openEdit = (row) => setEditNote({ noteId: row.noteId, sessionId: row.sessionId })
 
   const openCount = (state.actionItems || []).filter(a => a.status !== 'done').length
 
@@ -1129,6 +1187,7 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
                   onEscalate={escalate}
                   onHide={hide}
                   onOpen={openSession}
+                  onEdit={openEdit}
                 />
               ))}
             </div>
@@ -1151,11 +1210,20 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
                   designer={designerById(row.designerId)}
                   onRestore={() => restore(row)}
                   onOpen={() => openSession(row.sessionId)}
+                  onEdit={() => openEdit(row)}
                 />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {editTarget && (
+        <NoteEditor
+          note={editTarget.note}
+          sessionId={editTarget.sessionId}
+          onClose={() => setEditNote(null)}
+        />
       )}
     </>
   )
@@ -1228,7 +1296,7 @@ function groupRows(rows, groupBy, allGames, filterGameId, gameById) {
   return groups
 }
 
-function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen }) {
+function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen, onEdit }) {
   return (
     <details open className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
       <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
@@ -1262,6 +1330,7 @@ function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen }) {
             onEscalate={() => onEscalate(row)}
             onHide={() => onHide(row)}
             onOpen={() => onOpen(row.sessionId)}
+            onEdit={onEdit ? () => onEdit(row) : null}
           />
         ))}
       </div>
@@ -1269,7 +1338,7 @@ function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen }) {
   )
 }
 
-function IssueRow({ row, designer, onEscalate, onHide, onOpen }) {
+function IssueRow({ row, designer, onEscalate, onHide, onOpen, onEdit }) {
   return (
     <div className="rounded-xl bg-ink-900 border border-ink-700 p-3 space-y-2">
       <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums">
@@ -1284,6 +1353,19 @@ function IssueRow({ row, designer, onEscalate, onHide, onOpen }) {
         >
           {row.gameName} · {row.sessionDate}
         </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="ml-auto text-ink-500 active:text-ink-200 px-1"
+            aria-label="Edit note"
+            title="Edit note"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="text-sm text-ink-100 leading-snug break-words">{row.text}</div>
       <div className="flex items-center gap-2">
@@ -1305,7 +1387,7 @@ function IssueRow({ row, designer, onEscalate, onHide, onOpen }) {
   )
 }
 
-function HiddenRow({ row, designer, onRestore, onOpen }) {
+function HiddenRow({ row, designer, onRestore, onOpen, onEdit }) {
   return (
     <div className="rounded-xl bg-ink-900 border border-ink-700 p-3 space-y-2 opacity-80">
       <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums">
@@ -1320,6 +1402,19 @@ function HiddenRow({ row, designer, onRestore, onOpen }) {
         >
           {row.gameName} · {row.sessionDate}
         </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="ml-auto text-ink-500 active:text-ink-200 px-1"
+            aria-label="Edit note"
+            title="Edit note"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="text-sm text-ink-200 leading-snug break-words italic">{row.text}</div>
       <button
@@ -1347,8 +1442,19 @@ function ClueHintDigest() {
   const { state, dispatch, gameById, designerById } = useStore()
   const [filterGameId, setFilterGameId] = useState('all')
   const [showAdded, setShowAdded] = useState(false)
+  // editNote → { noteId, sessionId } — opens NoteEditor when set, modal-style
+  const [editNote, setEditNote] = useState(null)
 
   const cluesetSet = useMemo(() => new Set(state.cluesetNoteIds || []), [state.cluesetNoteIds])
+
+  // Pull the latest note off state when the editor's open so concurrent edits
+  // (e.g. via the Review timeline on another device) don't get clobbered.
+  const editTarget = useMemo(() => {
+    if (!editNote) return null
+    const sess = state.sessions.find(s => s.id === editNote.sessionId)
+    const note = sess?.notes.find(n => n.id === editNote.noteId)
+    return note ? { note, sessionId: editNote.sessionId } : null
+  }, [editNote, state.sessions])
 
   // Pull every Clue / Hint note across all sessions, then split by whether
   // it's already in the clueset. We keep both lists so the toolbar can show
@@ -1414,6 +1520,13 @@ function ClueHintDigest() {
   }
 
   const openSession = (sessionId) => dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
+  const openEdit = (row) => setEditNote({ noteId: row.noteId, sessionId: row.sessionId })
+
+  // Headline counts of distinct clue / hint notes in the current scope. A note
+  // tagged with both Clue and Hint is counted once in each bucket — that's
+  // how it's surfaced visually below too.
+  const visibleClueCount = rows.filter(r => r.isClue).length
+  const visibleHintCount = rows.filter(r => r.isHint).length
 
   if (rows.length === 0 && addedRows.length === 0) {
     return (
@@ -1471,7 +1584,7 @@ function ClueHintDigest() {
         </span>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-ink-50">
-            {showAdded ? 'Showing added to clueset' : 'Hide added to clueset'}
+            {showAdded ? 'Showing Added Clues' : 'Show Added Clues'}
           </div>
           <div className="text-[11px] text-ink-400">
             {addedRows.length === 0
@@ -1480,6 +1593,17 @@ function ClueHintDigest() {
           </div>
         </div>
       </button>
+
+      {/* Distinct clue / hint counts for the current visible (not-added) scope */}
+      {(visibleClueCount > 0 || visibleHintCount > 0) && (
+        <div className="flex items-center gap-2 px-1">
+          <CountChip label="clues" count={visibleClueCount} color={CLUE_COLOR} />
+          <CountChip label="hints" count={visibleHintCount} color={HINT_COLOR} />
+          <span className="text-[11px] text-ink-500 ml-auto">
+            {rows.length} note{rows.length === 1 ? '' : 's'}
+          </span>
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-sm text-ink-400">
@@ -1497,11 +1621,34 @@ function ClueHintDigest() {
               designerById={designerById}
               onToggleClueset={toggleClueset}
               onOpenSession={openSession}
+              onEdit={openEdit}
             />
           ))}
         </div>
       )}
+
+      {editTarget && (
+        <NoteEditor
+          note={editTarget.note}
+          sessionId={editTarget.sessionId}
+          onClose={() => setEditNote(null)}
+        />
+      )}
     </>
+  )
+}
+
+// Tiny pill that shows "N clues" or "M hints" with the type's distinctive
+// color. Used in the digest toolbar + each puzzle group's summary.
+function CountChip({ label, count, color }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold tabular-nums border"
+      style={{ backgroundColor: `${color}1f`, color, borderColor: `${color}55` }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+      {count} {label}
+    </span>
   )
 }
 
@@ -1577,9 +1724,12 @@ function sortRows(rows) {
   )
 }
 
-// One puzzle's collapsible card. Closed by default; the headline counts only
-// "visible" rows (not in clueset) so the number matches what'll appear inside.
-function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onOpenSession }) {
+// One puzzle's collapsible card. Closed by default; the headline shows
+// distinct clue + hint counts (counts a Clue+Hint note in both buckets) for
+// the visible rows.
+function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onOpenSession, onEdit }) {
+  const visibleClues = group.visible.filter(r => r.isClue).length
+  const visibleHints = group.visible.filter(r => r.isHint).length
   return (
     <details className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
       <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
@@ -1596,10 +1746,23 @@ function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onO
               <span className="text-[11px] text-ink-400">· {group.gameName}</span>
             )}
           </div>
-          <div className="text-[11px] text-ink-400 mt-0.5 tabular-nums">
-            {group.visible.length} note{group.visible.length === 1 ? '' : 's'}
+          <div className="flex items-center gap-1.5 mt-1 text-[11px] tabular-nums flex-wrap">
+            {visibleClues > 0 && (
+              <span style={{ color: CLUE_COLOR }} className="font-semibold">
+                {visibleClues} clue{visibleClues === 1 ? '' : 's'}
+              </span>
+            )}
+            {visibleClues > 0 && visibleHints > 0 && <span className="text-ink-600">·</span>}
+            {visibleHints > 0 && (
+              <span style={{ color: HINT_COLOR }} className="font-semibold">
+                {visibleHints} hint{visibleHints === 1 ? '' : 's'}
+              </span>
+            )}
+            {visibleClues === 0 && visibleHints === 0 && (
+              <span className="text-ink-400">no visible notes</span>
+            )}
             {group.added.length > 0 && (
-              <span className="text-ink-500"> · {group.added.length} in clueset</span>
+              <span className="text-ink-500">· {group.added.length} in clueset</span>
             )}
           </div>
         </div>
@@ -1619,6 +1782,7 @@ function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onO
             designer={designerById(row.designerId)}
             onToggleClueset={() => onToggleClueset(row)}
             onOpenSession={() => onOpenSession(row.sessionId)}
+            onEdit={onEdit ? () => onEdit(row) : null}
           />
         ))}
         {group.added.map(row => (
@@ -1629,6 +1793,7 @@ function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onO
             designer={designerById(row.designerId)}
             onToggleClueset={() => onToggleClueset(row)}
             onOpenSession={() => onOpenSession(row.sessionId)}
+            onEdit={onEdit ? () => onEdit(row) : null}
           />
         ))}
       </div>
@@ -1636,17 +1801,36 @@ function CluePuzzleGroup({ group, cluesetSet, designerById, onToggleClueset, onO
   )
 }
 
-function ClueRow({ row, inClueset, designer, onToggleClueset, onOpenSession }) {
+function ClueRow({ row, inClueset, designer, onToggleClueset, onOpenSession, onEdit }) {
+  // Build the badge + the row's accent color. A note tagged with both shows
+  // a split-fill swatch on its left edge (yellow on top, violet on bottom)
+  // so designers can visually scan a list and see ratio at a glance.
   const tagBadge = row.isClue && row.isHint
-    ? { label: 'Clue + Hint', class: 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' }
+    ? { label: 'Clue + Hint' }
     : row.isHint
-      ? { label: 'Hint',      class: 'bg-violet-500/15 border-violet-500/40 text-violet-200' }
-      : { label: 'Clue',      class: 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' }
+      ? { label: 'Hint' }
+      : { label: 'Clue' }
+
+  const badgeStyle = row.isClue && row.isHint
+    ? { background: `linear-gradient(90deg, ${CLUE_COLOR}33 0%, ${CLUE_COLOR}33 50%, ${HINT_COLOR}33 50%, ${HINT_COLOR}33 100%)`, borderColor: `${HINT_COLOR}66`, color: HINT_COLOR }
+    : row.isHint
+      ? { backgroundColor: `${HINT_COLOR}26`, borderColor: `${HINT_COLOR}66`, color: HINT_COLOR }
+      : { backgroundColor: `${CLUE_COLOR}26`, borderColor: `${CLUE_COLOR}66`, color: CLUE_COLOR }
+
+  // Left accent stripe sits inside the rounded card to color-code the row.
+  const accentBg = row.isClue && row.isHint
+    ? `linear-gradient(180deg, ${CLUE_COLOR} 0%, ${CLUE_COLOR} 50%, ${HINT_COLOR} 50%, ${HINT_COLOR} 100%)`
+    : row.isHint ? HINT_COLOR : CLUE_COLOR
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${
+    <div className={`relative rounded-xl border p-3 pl-4 space-y-2 overflow-hidden ${
       inClueset ? 'bg-ink-900/60 border-emerald-500/30 opacity-80' : 'bg-ink-900 border-ink-700'
     }`}>
+      <span
+        className="absolute left-0 top-0 bottom-0 w-1.5"
+        style={{ background: accentBg }}
+        aria-hidden
+      />
       <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums flex-wrap">
         <span className="font-mono">{fmtCountdown(row.timestamp)}</span>
         {designer && (
@@ -1659,9 +1843,25 @@ function ClueRow({ row, inClueset, designer, onToggleClueset, onOpenSession }) {
         >
           {row.gameName} · {row.sessionDate}
         </button>
-        <span className={`ml-auto text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full border ${tagBadge.class}`}>
+        <span
+          className="ml-auto text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full border"
+          style={badgeStyle}
+        >
           {tagBadge.label}
         </span>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="text-ink-500 active:text-ink-200 px-1"
+            aria-label="Edit note"
+            title="Edit note"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="text-sm text-ink-100 leading-snug break-words">{row.text}</div>
       <ClusetToggle inClueset={inClueset} onChange={onToggleClueset} />
@@ -1696,6 +1896,99 @@ function ClusetToggle({ inClueset, onChange }) {
           }`}
           aria-pressed={inClueset}
         >Yes</button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Stacked bar chart — one column per puzzle, clue count + hint count stacked
+// to form a single bar. Sorted by total descending (most asks on the left)
+// so the puzzles that need the most help bubble up.
+// ============================================================================
+
+function CluesHintsBarChart({ game, puzzleStats }) {
+  const data = useMemo(() => {
+    const list = (game?.puzzles || []).map(p => {
+      const stats = puzzleStats?.[p.id] || { perCategory: {} }
+      const clues = stats.perCategory?.Clue || 0
+      const hints = stats.perCategory?.Hint || 0
+      return { id: p.id, name: p.name, code: p.code || '', clues, hints, total: clues + hints }
+    })
+    return list.filter(d => d.total > 0).sort((a, b) =>
+      b.total - a.total || a.name.localeCompare(b.name)
+    )
+  }, [game, puzzleStats])
+
+  if (data.length === 0) {
+    return (
+      <div className="rounded-xl bg-ink-900 border border-ink-700 p-4 text-center text-sm text-ink-500">
+        No clue or hint notes tagged to puzzles yet.
+      </div>
+    )
+  }
+
+  const max = Math.max(...data.map(d => d.total))
+  // Cap chart height so it stays compact on phones; actual bar heights scale
+  // off the largest column so the tallest hits 100%.
+  const CHART_PX = 160
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto no-scrollbar -mx-4 px-4">
+        <div className="flex items-end gap-2.5 pt-3" style={{ minWidth: `${data.length * 52}px` }}>
+          {data.map(d => {
+            const totalH = (d.total / max) * CHART_PX
+            // Within each stack, divide proportional to clue/hint counts.
+            const clueH = d.total > 0 ? (d.clues / d.total) * totalH : 0
+            const hintH = d.total > 0 ? (d.hints / d.total) * totalH : 0
+            return (
+              <div key={d.id} className="flex flex-col items-center w-12 flex-shrink-0">
+                <div className="text-[11px] font-bold text-ink-100 tabular-nums mb-1">{d.total}</div>
+                <div
+                  className="w-9 rounded-md overflow-hidden bg-ink-900 border border-ink-700 flex flex-col-reverse"
+                  style={{ height: CHART_PX }}
+                  title={`${d.name} · ${d.clues} clue${d.clues === 1 ? '' : 's'}, ${d.hints} hint${d.hints === 1 ? '' : 's'}`}
+                >
+                  {d.clues > 0 && (
+                    <div style={{ height: clueH, backgroundColor: CLUE_COLOR }} />
+                  )}
+                  {d.hints > 0 && (
+                    <div style={{ height: hintH, backgroundColor: HINT_COLOR }} />
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-1 text-[10px] tabular-nums">
+                  {d.clues > 0 && (
+                    <span style={{ color: CLUE_COLOR }} className="font-semibold">{d.clues}</span>
+                  )}
+                  {d.clues > 0 && d.hints > 0 && <span className="text-ink-600">·</span>}
+                  {d.hints > 0 && (
+                    <span style={{ color: HINT_COLOR }} className="font-semibold">{d.hints}</span>
+                  )}
+                </div>
+                {d.code && (
+                  <div className="text-[9px] mt-1 px-1 rounded bg-ink-800 border border-ink-700 text-ink-400 tabular-nums truncate max-w-full">
+                    {d.code}
+                  </div>
+                )}
+                <div className="mt-1 text-[10px] text-ink-300 text-center leading-tight break-words max-w-full">
+                  {d.name}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-300 px-1 pt-1 border-t border-ink-700/50">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: CLUE_COLOR }} /> Clues
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: HINT_COLOR }} /> Hints
+        </span>
+        <span className="text-ink-500 ml-auto">Sorted by total · most on the left</span>
       </div>
     </div>
   )

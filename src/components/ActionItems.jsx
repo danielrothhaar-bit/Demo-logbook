@@ -31,7 +31,7 @@ function findSourceNote(state, item) {
   return null
 }
 
-export default function ActionItems() {
+export default function ActionItems({ embedded = false }) {
   const { state, dispatch, gameName, designerById } = useStore()
   const [filter, setFilter] = useState('all')
 
@@ -72,18 +72,26 @@ export default function ActionItems() {
     if (src) dispatch({ type: 'OPEN_SESSION_REVIEW', id: src.session.id })
   }
 
+  // When embedded inside the Trends page the parent already hosts the tabs,
+  // so we drop the wrapper padding + back button and render the content
+  // straight into the existing layout.
+  const Wrapper = embedded ? 'div' : 'div'
+  const wrapperClass = embedded ? 'space-y-3' : 'px-4 pt-3 space-y-3'
+
   return (
-    <div className="px-4 pt-3 space-y-3">
-      <button
-        onClick={() => dispatch({ type: 'SET_MODE', mode: 'trends' })}
-        className="flex items-center gap-2 text-xs text-accent-400 active:text-accent-500"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="19" y1="12" x2="5" y2="12" />
-          <polyline points="12 19 5 12 12 5" />
-        </svg>
-        Back to Trends
-      </button>
+    <Wrapper className={wrapperClass}>
+      {!embedded && (
+        <button
+          onClick={() => dispatch({ type: 'SET_MODE', mode: 'trends' })}
+          className="flex items-center gap-2 text-xs text-accent-400 active:text-accent-500"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back to Trends
+        </button>
+      )}
 
       <div className="flex gap-1 overflow-x-auto no-scrollbar -mx-4 px-4">
         {FILTERS.map(f => {
@@ -174,6 +182,6 @@ export default function ActionItems() {
           })}
         </div>
       )}
-    </div>
+    </Wrapper>
   )
 }
