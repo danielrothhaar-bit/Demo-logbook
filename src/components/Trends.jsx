@@ -1048,6 +1048,7 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
           designerId:    n.designerId,
           timestamp:     n.timestamp,
           text:          n.text,
+          photoUrl:      n.photoUrl || null,
           puzzleIds:     n.puzzleIds || [],
           componentIds:  n.componentIds || []
         }
@@ -1098,11 +1099,8 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
     dispatch({ type: 'UNHIDE_NOTE', noteId: row.noteId })
   }
 
-  const goToActions = () => dispatch({ type: 'SET_MODE', mode: 'actionItems' })
   const openSession = (sessionId) => dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
   const openEdit = (row) => setEditNote({ noteId: row.noteId, sessionId: row.sessionId })
-
-  const openCount = (state.actionItems || []).filter(a => a.status !== 'done').length
 
   return (
     <>
@@ -1131,24 +1129,15 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
         </div>
       )}
 
-      {/* Top toolbar: Action Items entry + show-hidden toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={goToActions}
-          className="flex-1 rounded-2xl bg-ink-800 border border-ink-700 active:bg-ink-700 px-3 py-2.5 text-left flex items-center gap-2"
-        >
-          <span className="text-lg">📋</span>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-ink-50">Action Items</div>
-            <div className="text-[11px] text-ink-400">
-              {openCount === 0 ? 'No open items' : `${openCount} open · tap to manage`}
-            </div>
-          </div>
-          <svg className="w-4 h-4 text-ink-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-      </div>
+      {/* Tech-only: per-component bar chart at the top, scoped to current
+          game filter. Skips render automatically when there are no rows. */}
+      {kind === 'tech' && rows.length > 0 && (
+        <ComponentNoteBarChart
+          rows={rows}
+          allGames={state.games}
+          filterGameId={filterGameId}
+        />
+      )}
 
       {rows.length === 0 && hiddenRows.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-6 text-center">
@@ -1298,7 +1287,7 @@ function groupRows(rows, groupBy, allGames, filterGameId, gameById) {
 
 function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen, onEdit }) {
   return (
-    <details open className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+    <details className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
       <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1367,22 +1356,29 @@ function IssueRow({ row, designer, onEscalate, onHide, onOpen, onEdit }) {
           </button>
         )}
       </div>
-      <div className="text-sm text-ink-100 leading-snug break-words">{row.text}</div>
-      <div className="flex items-center gap-2">
+      {/* Note + actions inline on the same row. Buttons share the compact
+          Hide-button sizing so they cluster on the right rather than
+          stretching across the full width of the card. */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0 text-sm text-ink-100 leading-snug break-words">{row.text}</div>
         <button
           onClick={onEscalate}
-          className="flex-1 px-3 py-2 rounded-lg bg-accent-500/15 border border-accent-500/40 text-accent-200 text-xs font-semibold active:bg-accent-500/25"
+          className="flex-shrink-0 px-3 py-2 rounded-lg bg-accent-500/15 border border-accent-500/40 text-accent-200 text-xs font-semibold active:bg-accent-500/25"
+          title="Escalate to Action Item"
         >
-          ↑ Escalate to Action Item
+          ↑ Escalate
         </button>
         <button
           onClick={onHide}
-          className="px-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-ink-300 text-xs font-medium active:bg-ink-700"
+          className="flex-shrink-0 px-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-ink-300 text-xs font-medium active:bg-ink-700"
           title="Hide from this view (note stays in the demo)"
         >
           Hide
         </button>
       </div>
+      {row.photoUrl && (
+        <img src={row.photoUrl} alt="" className="rounded-lg max-h-48 w-full object-cover" />
+      )}
     </div>
   )
 }
@@ -1417,12 +1413,77 @@ function HiddenRow({ row, designer, onRestore, onOpen, onEdit }) {
         )}
       </div>
       <div className="text-sm text-ink-200 leading-snug break-words italic">{row.text}</div>
+      {row.photoUrl && (
+        <img src={row.photoUrl} alt="" className="rounded-lg max-h-48 w-full object-cover" />
+      )}
       <button
         onClick={onRestore}
         className="w-full px-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-ink-200 text-xs font-medium active:bg-ink-700"
       >
         ↺ Restore
       </button>
+    </div>
+  )
+}
+
+// Horizontal bar chart shown at the top of the Tech Issues page. Counts the
+// number of tech-issue notes tagged to each component, sorted descending.
+// Notes that aren't tagged to any component fall into a single "Untagged"
+// row at the bottom so they're still visible.
+function ComponentNoteBarChart({ rows, allGames, filterGameId }) {
+  const counts = useMemo(() => {
+    const games = filterGameId === 'all' ? allGames : allGames.filter(g => g.id === filterGameId)
+    const map = new Map() // id → { id, name, code, gameName, count }
+    for (const g of games) {
+      for (const c of g.components || []) {
+        map.set(c.id, { id: c.id, name: c.name, code: c.code || '', gameName: g.name, count: 0 })
+      }
+    }
+    let untagged = 0
+    for (const r of rows) {
+      const valid = (r.componentIds || []).filter(id => map.has(id))
+      if (valid.length === 0) {
+        untagged++
+        continue
+      }
+      for (const id of valid) map.get(id).count++
+    }
+    const list = [...map.values()].filter(c => c.count > 0)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    if (untagged > 0) {
+      list.push({ id: '__untagged__', name: 'Untagged', code: '', gameName: '', count: untagged })
+    }
+    return list
+  }, [rows, allGames, filterGameId])
+
+  if (counts.length === 0) return null
+  const max = Math.max(...counts.map(c => c.count))
+
+  return (
+    <div className="rounded-2xl bg-ink-800 border border-ink-700 p-3 space-y-2">
+      <div className="text-xs uppercase tracking-wider text-ink-400 font-semibold flex items-center justify-between">
+        <span>Tech issues by component</span>
+        <span className="text-ink-500 normal-case tracking-normal">most first</span>
+      </div>
+      <div className="space-y-1.5">
+        {counts.map(c => {
+          const pct = max > 0 ? (c.count / max) * 100 : 0
+          return (
+            <div key={c.id} className="flex items-center gap-2 text-xs">
+              <span className="w-28 sm:w-32 flex-shrink-0 truncate text-ink-200" title={c.name}>
+                {c.name}
+              </span>
+              <div className="flex-1 h-5 bg-ink-900 rounded overflow-hidden border border-ink-700">
+                <div
+                  className="h-full"
+                  style={{ width: `${pct}%`, backgroundColor: '#fb923c' }}
+                />
+              </div>
+              <span className="text-ink-100 font-bold tabular-nums w-7 text-right">{c.count}</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1936,7 +1997,11 @@ function CluesHintsBarChart({ game, puzzleStats }) {
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto no-scrollbar -mx-4 px-4">
-        <div className="flex items-end gap-2.5 pt-3" style={{ minWidth: `${data.length * 52}px` }}>
+        {/* items-start so all columns share a top edge — combined with the
+            fixed-height count + bar above, this guarantees every bar's
+            bottom sits on the same baseline regardless of how long each
+            puzzle name wraps below. */}
+        <div className="flex items-start gap-2.5 pt-3" style={{ minWidth: `${data.length * 52}px` }}>
           {data.map(d => {
             const totalH = (d.total / max) * CHART_PX
             // Within each stack, divide proportional to clue/hint counts.
@@ -1944,9 +2009,9 @@ function CluesHintsBarChart({ game, puzzleStats }) {
             const hintH = d.total > 0 ? (d.hints / d.total) * totalH : 0
             return (
               <div key={d.id} className="flex flex-col items-center w-12 flex-shrink-0">
-                <div className="text-[11px] font-bold text-ink-100 tabular-nums mb-1">{d.total}</div>
+                <div className="text-[11px] font-bold text-ink-100 tabular-nums mb-1 h-4 leading-4">{d.total}</div>
                 <div
-                  className="w-9 rounded-md overflow-hidden bg-ink-900 border border-ink-700 flex flex-col-reverse"
+                  className="w-9 rounded-md overflow-hidden bg-ink-900 border border-ink-700 flex flex-col-reverse flex-shrink-0"
                   style={{ height: CHART_PX }}
                   title={`${d.name} · ${d.clues} clue${d.clues === 1 ? '' : 's'}, ${d.hints} hint${d.hints === 1 ? '' : 's'}`}
                 >
