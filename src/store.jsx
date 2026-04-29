@@ -19,6 +19,7 @@ function clientInitialState() {
     games: [],
     sessions: [],
     actionItems: [],
+    hiddenNoteIds: [],
     activeDesignerId: null,
     activeSessionId: null,
     reviewSessionId: null,
@@ -148,7 +149,7 @@ export function StoreProvider({ children }) {
             baseDispatch({ type: 'OPEN_SESSION_LIVE', id: nav.activeSessionId })
           } else if (nav.mode === 'review' && sessionExists(nav.reviewSessionId)) {
             baseDispatch({ type: 'OPEN_SESSION_REVIEW', id: nav.reviewSessionId })
-          } else if (['home', 'setup', 'trends', 'admin'].includes(nav.mode)) {
+          } else if (['home', 'setup', 'trends', 'admin', 'actionItems'].includes(nav.mode)) {
             baseDispatch({ type: 'SET_MODE', mode: nav.mode })
           }
         }

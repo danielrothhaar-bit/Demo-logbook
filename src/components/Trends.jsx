@@ -4,8 +4,10 @@ import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/syn
 import ClickablePhoto from './ClickablePhoto.jsx'
 
 const PAGES = [
-  { id: 'trends', label: 'Game Trends' },
-  { id: 'photos', label: 'Team Photos' }
+  { id: 'trends',  label: 'Puzzle Trends' },
+  { id: 'tech',    label: 'Tech Issues' },
+  { id: 'changes', label: 'Game Changes' },
+  { id: 'photos',  label: 'Team Photos' }
 ]
 
 export default function Trends() {
@@ -17,12 +19,12 @@ export default function Trends() {
 
   return (
     <div className="px-4 pt-3 space-y-4">
-      <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-full p-1">
+      <div className="flex gap-1 bg-ink-800 border border-ink-700 rounded-full p-1 overflow-x-auto no-scrollbar">
         {PAGES.map(p => (
           <button
             key={p.id}
             onClick={() => setPage(p.id)}
-            className={`flex-1 py-2 text-sm font-medium rounded-full transition-colors ${
+            className={`flex-1 min-w-fit px-3 py-2 text-sm font-medium rounded-full transition-colors whitespace-nowrap ${
               page === p.id ? 'bg-accent-500 text-ink-50' : 'text-ink-200 active:bg-ink-700'
             }`}
           >{p.label}</button>
@@ -31,6 +33,20 @@ export default function Trends() {
 
       {page === 'photos' ? (
         <TeamPhotos />
+      ) : page === 'tech' ? (
+        <IssueDigest
+          kind="tech"
+          category="Tech Issue"
+          groupBy="component"
+          emptyHint="Tech Issue notes from any demo will show up here, grouped by the component they're tagged with."
+        />
+      ) : page === 'changes' ? (
+        <IssueDigest
+          kind="changes"
+          category="Game Change"
+          groupBy="puzzle"
+          emptyHint="Game Change notes from any demo will show up here, grouped by the puzzle they're tagged with."
+        />
       ) : games.length === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center">
           <div className="font-semibold mb-1">No games yet</div>
@@ -530,6 +546,11 @@ function LeaderboardRow({ item, totalDemos, kind, tone, scoreCategories }) {
 // for benchmarked puzzles depending on whether the avg is within the ±3-min
 // goal window.
 function PuzzleAverageTimeline({ perPuzzle, game }) {
+  // Track which dot's tooltip is showing. CSS-only :hover would surface every
+  // tooltip when overlapping dots share screen space, so we control it with
+  // state instead — only one name visible at a time. Tap also toggles for
+  // touch devices that have no hover.
+  const [activeDot, setActiveDot] = useState(null)
   const sorted = (perPuzzle || [])
     .filter(p => p.avgSolvedTs != null)
     .sort((a, b) => a.avgSolvedTs - b.avgSolvedTs)
@@ -621,7 +642,9 @@ function PuzzleAverageTimeline({ perPuzzle, game }) {
             )
           })}
 
-          {/* Average solve dots — colored vs benchmark when one exists */}
+          {/* Average solve dots — colored vs benchmark when one exists. Hover/tap
+              activates a single tooltip via state so overlapping dots don't all
+              show their names at once. */}
           {sorted.map((p, i) => {
             const pct = Math.min(100, Math.max(0, (p.avgSolvedTs / span) * 100))
             const benchSec = benchSecById[p.id]
@@ -640,25 +663,34 @@ function PuzzleAverageTimeline({ perPuzzle, game }) {
                   return `${delta > 0 ? '+' : '−'}${fmtTime(abs)} ${delta > 0 ? 'after' : 'before'} goal`
                 })()
               : null
+            const isActive = activeDot === p.id
             return (
               <div
                 key={p.id}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"
-                style={{ left: `${pct}%` }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+                style={{ left: `${pct}%`, zIndex: isActive ? 40 : 10 }}
+                onMouseEnter={() => setActiveDot(p.id)}
+                onMouseLeave={() => setActiveDot(prev => prev === p.id ? null : prev)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setActiveDot(prev => prev === p.id ? null : p.id)
+                }}
               >
-                <span className={`block w-7 h-7 rounded-full ${dotClass} border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg`}>
+                <span className={`block w-7 h-7 rounded-full ${dotClass} border-2 border-ink-800 flex items-center justify-center text-[12px] font-bold text-ink-950 leading-none shadow-lg cursor-pointer`}>
                   {i + 1}
                 </span>
-                <div className={`absolute -top-9 ${chipAlign(pct)} px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-30 shadow-xl`}>
-                  {p.name}
-                  <span className="text-ink-400 tabular-nums ml-1">· avg {fmtCountdown(p.avgSolvedTs)}</span>
-                  {p.solvedDemoCount > 0 && (
-                    <span className="text-ink-500 ml-1">({p.solvedDemoCount}×)</span>
-                  )}
-                  {deltaLabel && (
-                    <span className={`ml-1 ${onTime ? 'text-emerald-300' : 'text-rose-300'}`}>· {deltaLabel}</span>
-                  )}
-                </div>
+                {isActive && (
+                  <div className={`absolute -top-9 ${chipAlign(pct)} px-2 py-1 rounded-md bg-ink-900 border border-ink-700 text-[11px] text-ink-100 font-medium whitespace-nowrap pointer-events-none z-40 shadow-xl`}>
+                    {p.name}
+                    <span className="text-ink-400 tabular-nums ml-1">· avg {fmtCountdown(p.avgSolvedTs)}</span>
+                    {p.solvedDemoCount > 0 && (
+                      <span className="text-ink-500 ml-1">({p.solvedDemoCount}×)</span>
+                    )}
+                    {deltaLabel && (
+                      <span className={`ml-1 ${onTime ? 'text-emerald-300' : 'text-rose-300'}`}>· {deltaLabel}</span>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -907,6 +939,392 @@ function BenchmarksSubsection({ perPuzzle }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ============================================================================
+// Cross-session issue digest — drives both the Tech Issues and Game Changes
+// pages. Aggregates every note tagged with the configured category across all
+// sessions, groups by component (tech) or puzzle (changes), and lets the
+// designer escalate a row to Action Items or hide it from the digest.
+//
+// "Hidden" notes are tracked globally on state.hiddenNoteIds. The original
+// note is never altered — it still lives on its session's review timeline.
+// Toggle "Show hidden" to surface them again with a Restore button.
+// ============================================================================
+
+const ISSUE_TONE = {
+  tech:    { dot: 'bg-yellow-400', accent: 'text-yellow-300', border: 'border-yellow-500/30' },
+  changes: { dot: 'bg-blue-400',   accent: 'text-blue-300',   border: 'border-blue-500/30' }
+}
+
+function IssueDigest({ kind, category, groupBy, emptyHint }) {
+  const { state, dispatch, gameById, designerById, gameName } = useStore()
+  const [filterGameId, setFilterGameId] = useState('all')
+  const [showHidden, setShowHidden] = useState(false)
+
+  const tone = ISSUE_TONE[kind] || ISSUE_TONE.tech
+  const hiddenSet = useMemo(() => new Set(state.hiddenNoteIds || []), [state.hiddenNoteIds])
+
+  // Build the flat list of notes that match the category + game filter, then
+  // partition by visibility. Each row carries its session metadata so the
+  // grouped views below can reference dates, designers, and origin.
+  const { rows, hiddenRows } = useMemo(() => {
+    const visible = []
+    const hidden = []
+    for (const s of state.sessions) {
+      if (filterGameId !== 'all' && s.gameId !== filterGameId) continue
+      const game = gameById(s.gameId)
+      for (const n of s.notes) {
+        if (!(n.categories || []).includes(category)) continue
+        const row = {
+          noteId:        n.id,
+          sessionId:     s.id,
+          sessionDate:   s.date,
+          sessionTime:   s.time,
+          gameId:        s.gameId,
+          gameName:      game?.name || '(deleted game)',
+          designerId:    n.designerId,
+          timestamp:     n.timestamp,
+          text:          n.text,
+          puzzleIds:     n.puzzleIds || [],
+          componentIds:  n.componentIds || []
+        }
+        if (hiddenSet.has(n.id)) hidden.push(row)
+        else visible.push(row)
+      }
+    }
+    return { rows: visible, hiddenRows: hidden }
+  }, [state.sessions, filterGameId, category, hiddenSet, gameById])
+
+  // Group by puzzle (changes) or component (tech). Each row attaches under
+  // every tagged item; rows with no tags fall into "Untagged".
+  const groups = useMemo(() => groupRows(rows, groupBy, state.games, filterGameId, gameById), [rows, groupBy, state.games, filterGameId, gameById])
+
+  // Game tabs scoped to games that actually have notes for this category, so
+  // the chip strip doesn't fill up with games that aren't relevant.
+  const relevantGames = useMemo(() => {
+    const ids = new Set()
+    for (const s of state.sessions) {
+      if (s.notes.some(n => (n.categories || []).includes(category))) ids.add(s.gameId)
+    }
+    return [...ids]
+      .map(id => gameById(id))
+      .filter(Boolean)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  }, [state.sessions, category, gameById])
+
+  const escalate = (row) => {
+    const stamp = fmtCountdown(row.timestamp)
+    const title = `[${category} · ${row.gameName} · ${row.sessionDate} ${stamp}] ${row.text}`
+    dispatch({
+      type: 'ADD_ACTION_ITEM',
+      item: {
+        text: title,
+        status: 'open',
+        relatedCategory: category,
+        sourceSessionIds: [row.sessionId],
+        sourceNoteId: row.noteId
+      }
+    })
+  }
+
+  const hide = (row) => {
+    dispatch({ type: 'HIDE_NOTE', noteId: row.noteId })
+  }
+
+  const restore = (row) => {
+    dispatch({ type: 'UNHIDE_NOTE', noteId: row.noteId })
+  }
+
+  const goToActions = () => dispatch({ type: 'SET_MODE', mode: 'actionItems' })
+  const openSession = (sessionId) => dispatch({ type: 'OPEN_SESSION_REVIEW', id: sessionId })
+
+  const openCount = (state.actionItems || []).filter(a => a.status !== 'done').length
+
+  return (
+    <>
+      {/* Game scope chips */}
+      {relevantGames.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
+          <button
+            onClick={() => setFilterGameId('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+              filterGameId === 'all'
+                ? 'bg-accent-500 border-accent-500 text-ink-50'
+                : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
+            }`}
+          >All games</button>
+          {relevantGames.map(g => (
+            <button
+              key={g.id}
+              onClick={() => setFilterGameId(g.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap ${
+                filterGameId === g.id
+                  ? 'bg-accent-500 border-accent-500 text-ink-50'
+                  : 'bg-ink-800 border-ink-700 text-ink-200 active:bg-ink-700'
+              }`}
+            >{g.name}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Top toolbar: Action Items entry + show-hidden toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={goToActions}
+          className="flex-1 rounded-2xl bg-ink-800 border border-ink-700 active:bg-ink-700 px-3 py-2.5 text-left flex items-center gap-2"
+        >
+          <span className="text-lg">📋</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-ink-50">Action Items</div>
+            <div className="text-[11px] text-ink-400">
+              {openCount === 0 ? 'No open items' : `${openCount} open · tap to manage`}
+            </div>
+          </div>
+          <svg className="w-4 h-4 text-ink-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
+
+      {rows.length === 0 && hiddenRows.length === 0 ? (
+        <div className="rounded-2xl bg-ink-800 border border-ink-700 p-6 text-center">
+          <div className="text-3xl mb-2">{kind === 'tech' ? '🛠' : '✏️'}</div>
+          <div className="font-semibold mb-1">No {category.toLowerCase()} notes yet</div>
+          <div className="text-sm text-ink-400 leading-relaxed">{emptyHint}</div>
+        </div>
+      ) : (
+        <>
+          <div className="text-xs text-ink-400 px-1">
+            {rows.length} note{rows.length === 1 ? '' : 's'}
+            {hiddenRows.length > 0 && (
+              <> · <button
+                onClick={() => setShowHidden(v => !v)}
+                className="text-accent-400 active:text-accent-500 underline-offset-2 hover:underline"
+              >
+                {showHidden ? 'hide' : 'show'} {hiddenRows.length} hidden
+              </button></>
+            )}
+          </div>
+
+          {groups.length === 0 ? (
+            <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-sm text-ink-400">
+              {filterGameId === 'all'
+                ? `No visible ${category.toLowerCase()} notes.`
+                : 'No notes for this game.'}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {groups.map(group => (
+                <IssueGroup
+                  key={group.key}
+                  group={group}
+                  tone={tone}
+                  designerById={designerById}
+                  onEscalate={escalate}
+                  onHide={hide}
+                  onOpen={openSession}
+                />
+              ))}
+            </div>
+          )}
+
+          {showHidden && hiddenRows.length > 0 && (
+            <div className="rounded-2xl bg-ink-800/40 border border-dashed border-ink-700 p-3 space-y-2">
+              <div className="text-xs uppercase tracking-wider text-ink-400 font-semibold flex items-center justify-between">
+                <span>Hidden notes</span>
+                <button
+                  onClick={() => setShowHidden(false)}
+                  className="text-ink-500 active:text-ink-200 text-base leading-none"
+                  aria-label="Close hidden"
+                >×</button>
+              </div>
+              {hiddenRows.map(row => (
+                <HiddenRow
+                  key={row.noteId}
+                  row={row}
+                  designer={designerById(row.designerId)}
+                  onRestore={() => restore(row)}
+                  onOpen={() => openSession(row.sessionId)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
+// Group rows by puzzle (Game Changes) or component (Tech Issues). Rows can
+// belong to multiple groups when tagged with multiple ids; ungrouped rows go
+// into a single "Untagged" bucket so they're still visible.
+function groupRows(rows, groupBy, allGames, filterGameId, gameById) {
+  // Build the universe of items we can group under. When a game filter is
+  // active we only show that game's items; otherwise we show every item that
+  // appears as a tag in `rows` (keeps "All games" view sane).
+  const itemMap = new Map() // id → { id, name, code, gameId, gameName }
+  const games = filterGameId === 'all' ? allGames : allGames.filter(g => g.id === filterGameId)
+  for (const g of games) {
+    const items = (groupBy === 'component' ? g.components : g.puzzles) || []
+    for (const it of items) {
+      itemMap.set(it.id, {
+        id: it.id, name: it.name, code: it.code || '',
+        gameId: g.id, gameName: g.name
+      })
+    }
+  }
+
+  const buckets = new Map() // itemId → { item, rows }
+  const untagged = []
+  const idsField = groupBy === 'component' ? 'componentIds' : 'puzzleIds'
+
+  for (const row of rows) {
+    const ids = (row[idsField] || []).filter(id => itemMap.has(id))
+    if (ids.length === 0) {
+      untagged.push(row)
+      continue
+    }
+    for (const id of ids) {
+      if (!buckets.has(id)) {
+        buckets.set(id, { item: itemMap.get(id), rows: [] })
+      }
+      buckets.get(id).rows.push(row)
+    }
+  }
+
+  const groups = [...buckets.values()].map(b => ({
+    key: b.item.id,
+    title: b.item.name,
+    code: b.item.code,
+    gameName: b.item.gameName,
+    rows: b.rows.slice().sort((a, b) =>
+      (b.sessionDate || '').localeCompare(a.sessionDate || '') ||
+      (b.timestamp - a.timestamp)
+    )
+  }))
+
+  // Most-mentioned first — that's where the actionable signal usually lives.
+  groups.sort((a, b) => b.rows.length - a.rows.length || a.title.localeCompare(b.title))
+
+  if (untagged.length > 0) {
+    groups.push({
+      key: '__untagged__',
+      title: 'Untagged',
+      code: '',
+      gameName: '',
+      rows: untagged.slice().sort((a, b) =>
+        (b.sessionDate || '').localeCompare(a.sessionDate || '') ||
+        (b.timestamp - a.timestamp)
+      )
+    })
+  }
+
+  return groups
+}
+
+function IssueGroup({ group, tone, designerById, onEscalate, onHide, onOpen }) {
+  return (
+    <details open className="group rounded-2xl bg-ink-800 border border-ink-700 overflow-hidden">
+      <summary className="px-4 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 active:bg-ink-700">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+            {group.code && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink-900 text-ink-400 border border-ink-700 tabular-nums">
+                {group.code}
+              </span>
+            )}
+            <span className="font-semibold text-ink-50">{group.title}</span>
+            {group.gameName && group.key !== '__untagged__' && (
+              <span className="text-[11px] text-ink-400">· {group.gameName}</span>
+            )}
+          </div>
+          <div className="text-[11px] text-ink-400 mt-0.5 tabular-nums">
+            {group.rows.length} note{group.rows.length === 1 ? '' : 's'}
+          </div>
+        </div>
+        <svg className="w-4 h-4 text-ink-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </summary>
+      <div className="px-3 pb-3 space-y-2">
+        {group.rows.map(row => (
+          <IssueRow
+            key={row.noteId}
+            row={row}
+            designer={designerById(row.designerId)}
+            onEscalate={() => onEscalate(row)}
+            onHide={() => onHide(row)}
+            onOpen={() => onOpen(row.sessionId)}
+          />
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function IssueRow({ row, designer, onEscalate, onHide, onOpen }) {
+  return (
+    <div className="rounded-xl bg-ink-900 border border-ink-700 p-3 space-y-2">
+      <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums">
+        <span className="font-mono">{fmtCountdown(row.timestamp)}</span>
+        {designer && (
+          <span className="font-bold" style={{ color: designer.color }}>{designer.initials}</span>
+        )}
+        <span className="text-ink-500">·</span>
+        <button
+          onClick={onOpen}
+          className="truncate text-left active:text-accent-400 hover:text-accent-400 underline-offset-2 hover:underline"
+        >
+          {row.gameName} · {row.sessionDate}
+        </button>
+      </div>
+      <div className="text-sm text-ink-100 leading-snug break-words">{row.text}</div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onEscalate}
+          className="flex-1 px-3 py-2 rounded-lg bg-accent-500/15 border border-accent-500/40 text-accent-200 text-xs font-semibold active:bg-accent-500/25"
+        >
+          ↑ Escalate to Action Item
+        </button>
+        <button
+          onClick={onHide}
+          className="px-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-ink-300 text-xs font-medium active:bg-ink-700"
+          title="Hide from this view (note stays in the demo)"
+        >
+          Hide
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function HiddenRow({ row, designer, onRestore, onOpen }) {
+  return (
+    <div className="rounded-xl bg-ink-900 border border-ink-700 p-3 space-y-2 opacity-80">
+      <div className="flex items-center gap-2 text-[11px] text-ink-400 tabular-nums">
+        <span className="font-mono">{fmtCountdown(row.timestamp)}</span>
+        {designer && (
+          <span className="font-bold" style={{ color: designer.color }}>{designer.initials}</span>
+        )}
+        <span className="text-ink-500">·</span>
+        <button
+          onClick={onOpen}
+          className="truncate text-left active:text-accent-400 hover:text-accent-400 underline-offset-2 hover:underline"
+        >
+          {row.gameName} · {row.sessionDate}
+        </button>
+      </div>
+      <div className="text-sm text-ink-200 leading-snug break-words italic">{row.text}</div>
+      <button
+        onClick={onRestore}
+        className="w-full px-3 py-2 rounded-lg bg-ink-800 border border-ink-700 text-ink-200 text-xs font-medium active:bg-ink-700"
+      >
+        ↺ Restore
+      </button>
     </div>
   )
 }

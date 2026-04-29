@@ -174,7 +174,7 @@ function seedActionItems(sessions) {
 // ------- Initial state -------
 
 // Persisted slice: what the server keeps in the volume.
-export const PERSISTED_KEYS = ['designers', 'categories', 'games', 'sessions', 'actionItems']
+export const PERSISTED_KEYS = ['designers', 'categories', 'games', 'sessions', 'actionItems', 'hiddenNoteIds']
 
 export function initialPersistedState() {
   const games = seedGames()
@@ -184,7 +184,8 @@ export function initialPersistedState() {
     categories: [...DEFAULT_CATEGORIES],
     games,
     sessions,
-    actionItems: seedActionItems(sessions)
+    actionItems: seedActionItems(sessions),
+    hiddenNoteIds: []
   }
 }
 
@@ -282,6 +283,11 @@ export function reducer(state, action) {
           componentIds: n.componentIds || [],
           audioUrl: n.audioUrl ?? null
         }))
+      }))
+      next.hiddenNoteIds = Array.isArray(next.hiddenNoteIds) ? next.hiddenNoteIds : []
+      next.actionItems = (next.actionItems || []).map(a => ({
+        ...a,
+        sourceNoteId: a.sourceNoteId || null
       }))
       // If the active designer was deleted on another device, drop the
       // selection so the user is prompted to pick again rather than
@@ -520,6 +526,25 @@ export function reducer(state, action) {
       return {
         ...state,
         actionItems: state.actionItems.map(a => a.id === action.id ? { ...a, ...action.patch } : a)
+      }
+    case 'DELETE_ACTION_ITEM':
+      return {
+        ...state,
+        actionItems: state.actionItems.filter(a => a.id !== action.id)
+      }
+
+    // Hide a note from aggregated views (Tech Issues / Game Changes digests).
+    // The note still lives on its session — this only filters it out of the
+    // cross-session lists. Toggle back via UNHIDE_NOTE.
+    case 'HIDE_NOTE': {
+      const set = new Set(state.hiddenNoteIds || [])
+      set.add(action.noteId)
+      return { ...state, hiddenNoteIds: [...set] }
+    }
+    case 'UNHIDE_NOTE':
+      return {
+        ...state,
+        hiddenNoteIds: (state.hiddenNoteIds || []).filter(id => id !== action.noteId)
       }
 
     default:

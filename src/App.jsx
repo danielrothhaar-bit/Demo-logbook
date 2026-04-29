@@ -5,6 +5,7 @@ import SessionSetup from './components/SessionSetup.jsx'
 import LiveLogging from './components/LiveLogging.jsx'
 import Review from './components/Review.jsx'
 import Trends from './components/Trends.jsx'
+import ActionItems from './components/ActionItems.jsx'
 import Admin from './components/Admin.jsx'
 import PersonaSwitcher from './components/PersonaSwitcher.jsx'
 import BottomNav from './components/BottomNav.jsx'
@@ -23,6 +24,7 @@ export default function App() {
         {state.mode === 'live'   && <LiveLogging />}
         {state.mode === 'review' && <Review />}
         {state.mode === 'trends' && <Trends />}
+        {state.mode === 'actionItems' && <ActionItems />}
         {state.mode === 'admin'  && <Admin />}
       </main>
       <BottomNav />
@@ -61,6 +63,7 @@ function Header() {
     live: 'Live Logging',
     review: 'Review',
     trends: 'Trends',
+    actionItems: 'Action Items',
     admin: 'Admin'
   }
   return (
