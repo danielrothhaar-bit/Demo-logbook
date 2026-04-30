@@ -186,16 +186,30 @@ export default function NoteEditor({ note, sessionId, onClose }) {
             />
           )}
 
-          {game?.components?.length > 0 && (
-            <MultiSelectDropdown
-              title="Components"
-              placeholder="Select components…"
-              options={game.components.map(c => ({ id: c.id, label: c.name, code: c.code, prefix: '⚙' }))}
-              selected={componentIds}
-              onToggle={(id) => setComponentIds(prev => toggle(prev, id))}
-              activeClass="bg-pink-500/20 text-pink-100"
-            />
-          )}
+          {game?.components?.length > 0 && (() => {
+            // When Tech Issue is tagged, narrow the picker to components flagged
+            // as tech-bearing in Admin — same filter the Live Tech Issue modal
+            // applies. Pre-existing selections that aren't tech are still shown
+            // so the user can see + remove them rather than getting silently
+            // dropped from the visible list.
+            const techMode = categories.includes('Tech Issue')
+            const visibleComponents = techMode
+              ? game.components.filter(c => c.hasTech || componentIds.includes(c.id))
+              : game.components
+            return (
+              <MultiSelectDropdown
+                title="Components"
+                placeholder={techMode ? 'Select tech component…' : 'Select components…'}
+                options={visibleComponents.map(c => ({ id: c.id, label: c.name, code: c.code, prefix: '⚙' }))}
+                selected={componentIds}
+                onToggle={(id) => setComponentIds(prev => toggle(prev, id))}
+                activeClass="bg-pink-500/20 text-pink-100"
+                hint={techMode
+                  ? `Filtered to tech components (Tech Issue tagged) · ${visibleComponents.length} of ${game.components.length}`
+                  : null}
+              />
+            )
+          })()}
         </div>
       </div>
     </div>
@@ -213,13 +227,28 @@ function TagSection({ title, children }) {
 
 // Collapsible multi-select. Uses <details> so open/close state is native and
 // click-outside doesn't auto-collapse — keeps interaction predictable on mobile.
-function MultiSelectDropdown({ title, placeholder, options, selected, onToggle, activeClass = '' }) {
+//
+// A search input renders above the list when there are 5+ options to filter
+// through. Matches against label + code, case-insensitive. The input is sticky
+// so it stays in view as the list scrolls.
+function MultiSelectDropdown({ title, placeholder, options, selected, onToggle, activeClass = '', hint = null }) {
+  const [query, setQuery] = useState('')
+  const showSearch = options.length >= 5
+
   const selectedOptions = options.filter(o => selected.includes(o.id))
   const summaryText = selectedOptions.length === 0
     ? placeholder
     : selectedOptions.length === 1
       ? selectedOptions[0].label
       : `${selectedOptions.length} selected`
+
+  const q = query.trim().toLowerCase()
+  const filtered = !q
+    ? options
+    : options.filter(o =>
+        o.label.toLowerCase().includes(q) ||
+        (o.code || '').toLowerCase().includes(q)
+      )
 
   return (
     <div>
@@ -235,29 +264,65 @@ function MultiSelectDropdown({ title, placeholder, options, selected, onToggle, 
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </summary>
-        <div className="border-t border-ink-700 max-h-56 overflow-y-auto">
-          {options.map(o => {
-            const active = selected.includes(o.id)
-            return (
-              <label key={o.id}
-                className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-ink-700/50 last:border-b-0 ${
-                  active ? activeClass : 'active:bg-ink-700'
-                }`}
-              >
+        <div className="border-t border-ink-700 max-h-72 overflow-y-auto">
+          {showSearch && (
+            <div className="sticky top-0 z-10 bg-ink-900 border-b border-ink-700 p-2">
+              <div className="relative">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                     className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-500 pointer-events-none">
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
                 <input
-                  type="checkbox"
-                  checked={active}
-                  onChange={() => onToggle(o.id)}
-                  className="w-4 h-4 accent-accent-500 flex-shrink-0"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full bg-ink-950 border border-ink-700 rounded-lg pl-8 pr-7 py-1.5 text-sm text-ink-100 placeholder-ink-500 outline-none focus:border-accent-500"
                 />
-                <span className="flex-shrink-0">{o.prefix}</span>
-                {o.code && <span className="font-mono text-[11px] text-ink-400 flex-shrink-0">{o.code}</span>}
-                <span className="flex-1 truncate">{o.label}</span>
-              </label>
-            )
-          })}
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-500 active:text-ink-200 px-1"
+                    aria-label="Clear search"
+                  >×</button>
+                )}
+              </div>
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-ink-500">
+              No matches for &ldquo;{query}&rdquo;
+            </div>
+          ) : (
+            filtered.map(o => {
+              const active = selected.includes(o.id)
+              return (
+                <label key={o.id}
+                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-ink-700/50 last:border-b-0 ${
+                    active ? activeClass : 'active:bg-ink-700'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => onToggle(o.id)}
+                    className="w-4 h-4 accent-accent-500 flex-shrink-0"
+                  />
+                  <span className="flex-shrink-0">{o.prefix}</span>
+                  {o.code && <span className="font-mono text-[11px] text-ink-400 flex-shrink-0">{o.code}</span>}
+                  <span className="flex-1 truncate">{o.label}</span>
+                </label>
+              )
+            })
+          )}
         </div>
       </details>
+      {hint && (
+        <div className="text-[10px] text-ink-500 mt-1 px-1">{hint}</div>
+      )}
       {selectedOptions.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {selectedOptions.map(o => (
