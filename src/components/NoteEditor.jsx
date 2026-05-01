@@ -9,7 +9,7 @@ const toggle = (arr, v) => arr.includes(v) ? arr.filter(x => x !== v) : [...arr,
 // still expose them so the user can remove them.
 const ACTION_TAGS = [
   'Puzzle Solved',
-  'Game Change',
+  'Puzzle Issue',
   'Tech Issue',
   'Wow Moment',
   'Frustration',

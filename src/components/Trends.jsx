@@ -16,7 +16,7 @@ const HINT_COLOR = '#a78bfa'
 const PAGES = [
   { id: 'trends',  label: 'Puzzle Trends' },
   { id: 'tech',    label: 'Tech Issues' },
-  { id: 'changes', label: 'Game Changes' },
+  { id: 'changes', label: 'Puzzle Issues' },
   { id: 'clues',   label: 'Clues/Hints' },
   { id: 'actions', label: 'Action Items' },
   { id: 'photos',  label: 'Team Photos' }
@@ -55,9 +55,9 @@ export default function Trends() {
       ) : page === 'changes' ? (
         <IssueDigest
           kind="changes"
-          category="Game Change"
+          category="Puzzle Issue"
           groupBy="puzzle"
-          emptyHint="Game Change notes from any demo will show up here, grouped by the puzzle they're tagged with."
+          emptyHint="Puzzle Issue notes from any demo will show up here, grouped by the puzzle they're tagged with."
         />
       ) : page === 'clues' ? (
         <ClueHintDigest />
@@ -229,30 +229,30 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
 
           <CollapsibleSection
             title="Top problem puzzles"
-            hint="Ranked by Frustration + Game Change notes."
+            hint="Ranked by Frustration + Puzzle Issue notes."
           >
             <Leaderboard
               items={game.puzzles}
               stats={agg.puzzleStats}
               totalDemos={agg.total}
-              scoreCategories={['Frustration', 'Game Change']}
+              scoreCategories={['Frustration', 'Puzzle Issue']}
               kind="puzzle"
-              emptyText="No frustration or game-change notes on puzzles yet."
+              emptyText="No frustration or puzzle-issue notes on puzzles yet."
               tone="rose"
             />
           </CollapsibleSection>
 
           <CollapsibleSection
             title="Top problem components"
-            hint="Ranked by Frustration + Game Change notes."
+            hint="Ranked by Frustration + Puzzle Issue notes."
           >
             <Leaderboard
               items={game.components}
               stats={agg.componentStats}
               totalDemos={agg.total}
-              scoreCategories={['Frustration', 'Game Change']}
+              scoreCategories={['Frustration', 'Puzzle Issue']}
               kind="component"
-              emptyText="No frustration or game-change notes on components yet."
+              emptyText="No frustration or puzzle-issue notes on components yet."
               tone="rose"
             />
           </CollapsibleSection>
@@ -992,7 +992,7 @@ function BenchmarksSubsection({ perPuzzle }) {
 }
 
 // ============================================================================
-// Cross-session issue digest — drives both the Tech Issues and Game Changes
+// Cross-session issue digest — drives both the Tech Issues and Puzzle Issues
 // pages. Aggregates every note tagged with the configured category across all
 // sessions, groups by component (tech) or puzzle (changes), and lets the
 // designer escalate a row to Action Items or hide it from the digest.
@@ -1218,7 +1218,7 @@ function IssueDigest({ kind, category, groupBy, emptyHint }) {
   )
 }
 
-// Group rows by puzzle (Game Changes) or component (Tech Issues). Rows can
+// Group rows by puzzle (Puzzle Issues) or component (Tech Issues). Rows can
 // belong to multiple groups when tagged with multiple ids; ungrouped rows go
 // into a single "Untagged" bucket so they're still visible.
 function groupRows(rows, groupBy, allGames, filterGameId, gameById) {

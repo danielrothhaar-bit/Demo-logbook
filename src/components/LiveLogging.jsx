@@ -11,7 +11,7 @@ import ClickablePhoto from './ClickablePhoto.jsx'
 // category tag. Replaces the old "type a note + quick tags" layout.
 const ACTIONS = [
   { id: 'puzzle_solved', label: 'Puzzle Solved', accent: 'emerald', tag: 'Puzzle Solved', hasText: false, hasPuzzle: true, requirePuzzle: true, filterSolved: true, hasComponent: false, noPhoto: true, hasSueToggle: true },
-  { id: 'game_change',   label: 'Game Change',   accent: 'blue',    tag: 'Game Change',   hasText: true,  hasPuzzle: true, hasComponent: false },
+  { id: 'puzzle_issue',  label: 'Puzzle Issue',  accent: 'blue',    tag: 'Puzzle Issue',  hasText: true,  hasPuzzle: true, hasComponent: false },
   { id: 'tech_issue',    label: 'Tech Issue',    accent: 'yellow',  tag: 'Tech Issue',    hasText: true,  hasPuzzle: false, hasComponent: true, filterTechComponents: true },
   { id: 'note',          label: 'Note',          accent: 'grey',    tag: null,            hasText: true,  hasPuzzle: false, hasComponent: false, requireText: true },
   { id: 'wow',           label: 'Wow',           accent: 'cyan',    tag: 'Wow Moment',    hasText: true,  hasPuzzle: true, hasComponent: false },

@@ -18,6 +18,7 @@ export const DEFAULT_CATEGORIES = [
 export const CATEGORY_COLORS = {
   'Game Flow Issue':     '#fb923c',
   'Puzzle Logic Issue':  '#a78bfa',
+  'Puzzle Issue':        '#60a5fa',
   'Tech Issue':          '#f472b6',
   'Wow Moment':          '#34d399',
   'Frustration':         '#fb7185',
@@ -28,6 +29,17 @@ export const CATEGORY_COLORS = {
   'SUE':                 '#f97316',
   'Quote':               '#a5b4fc',
   'Feedback Discussion': '#22d3ee'
+}
+
+// Legacy → current category renames. Applied on hydrate so historical notes
+// stored with the old name render under the new label without needing a
+// destructive data migration. Add new entries here whenever a tag is renamed.
+const LEGACY_CATEGORY_RENAMES = {
+  'Game Change': 'Puzzle Issue'
+}
+
+function renameCategory(c) {
+  return LEGACY_CATEGORY_RENAMES[c] || c
 }
 
 export const NEGATIVE_CATEGORIES = new Set(['Game Flow Issue', 'Puzzle Logic Issue', 'Tech Issue', 'Frustration'])
@@ -282,14 +294,19 @@ export function reducer(state, action) {
           ...n,
           puzzleIds: n.puzzleIds || [],
           componentIds: n.componentIds || [],
-          audioUrl: n.audioUrl ?? null
+          audioUrl: n.audioUrl ?? null,
+          // Legacy 'Game Change' tags get rewritten to 'Puzzle Issue' so old
+          // notes show up under the new label without needing a destructive
+          // server-side migration.
+          categories: (n.categories || []).map(renameCategory)
         }))
       }))
       next.hiddenNoteIds = Array.isArray(next.hiddenNoteIds) ? next.hiddenNoteIds : []
       next.cluesetNoteIds = Array.isArray(next.cluesetNoteIds) ? next.cluesetNoteIds : []
       next.actionItems = (next.actionItems || []).map(a => ({
         ...a,
-        sourceNoteId: a.sourceNoteId || null
+        sourceNoteId: a.sourceNoteId || null,
+        relatedCategory: renameCategory(a.relatedCategory)
       }))
       // If the active designer was deleted on another device, drop the
       // selection so the user is prompted to pick again rather than
@@ -535,7 +552,7 @@ export function reducer(state, action) {
         actionItems: state.actionItems.filter(a => a.id !== action.id)
       }
 
-    // Hide a note from aggregated views (Tech Issues / Game Changes digests).
+    // Hide a note from aggregated views (Tech Issues / Puzzle Issues digests).
     // The note still lives on its session — this only filters it out of the
     // cross-session lists. Toggle back via UNHIDE_NOTE.
     case 'HIDE_NOTE': {

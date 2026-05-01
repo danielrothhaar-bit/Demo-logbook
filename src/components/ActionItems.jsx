@@ -19,12 +19,12 @@ const FILTERS = [
   ...STATUS_OPTIONS
 ]
 
-// Display order for the category sections. Tech Issue + Game Change lead
+// Display order for the category sections. Tech Issue + Puzzle Issue lead
 // because they're the canonical escalation paths from the digests; anything
 // not in this list sorts after, alphabetically.
 const CATEGORY_ORDER = [
   'Tech Issue',
-  'Game Change',
+  'Puzzle Issue',
   'Puzzle Logic Issue',
   'Game Flow Issue',
   'Frustration',
@@ -222,7 +222,7 @@ export default function ActionItems({ embedded = false }) {
             {filter === 'all' ? 'No action items yet' : `No ${STATUS_LABEL[filter]?.toLowerCase()} items`}
           </div>
           <div className="text-sm text-ink-400 leading-relaxed">
-            Escalate Tech Issues or Game Changes from the Trends screen to track them here.
+            Escalate Tech Issues or Puzzle Issues from the Trends screen to track them here.
           </div>
         </div>
       ) : (
