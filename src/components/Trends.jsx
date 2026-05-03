@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useStore, fmtTime, fmtCountdown, fmtClockTime, parseBenchmark, DEMO_TARGET_SEC } from '../store.jsx'
 import { aggregateAcrossSessions, aggregatePuzzleSolveTimes } from '../utils/synthesis.js'
 import ClickablePhoto from './ClickablePhoto.jsx'
@@ -114,14 +114,17 @@ function CollapsibleSection({ title, hint, children, defaultOpen = true }) {
 function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }) {
   const game = gameById(gameId) || games[0]
   const [teamFilter, setTeamFilter] = useState('all')
+  const [sizeFilter, setSizeFilter] = useState('all')
 
-  // Sessions narrowed to the active team-type filter. Everything that
-  // aggregates below sees only these so the toggle affects the whole view.
+  // Sessions narrowed to the active team-type and team-size filters.
+  // Everything that aggregates below sees only these so the toggles affect
+  // the whole view.
   const filteredSessions = useMemo(
-    () => teamFilter === 'all'
-      ? state.sessions
-      : state.sessions.filter(s => s.experience === teamFilter),
-    [state.sessions, teamFilter]
+    () => state.sessions.filter(s =>
+      (teamFilter === 'all' || s.experience === teamFilter) &&
+      (sizeFilter === 'all' || s.teamSize === sizeFilter)
+    ),
+    [state.sessions, teamFilter, sizeFilter]
   )
   // Counts per team type for the toggle header — lets you see at a glance
   // how much data there is to slice before you commit to a filter.
@@ -134,6 +137,30 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
     }
     return c
   }, [state.sessions, game.id])
+  // Counts per team size, scoped to the current game and team-type filter so
+  // the visible sizes/counts reflect what's actually available given the
+  // other active filter. Returned ascending by size for a stable pill order.
+  const sizeCounts = useMemo(() => {
+    const map = new Map()
+    let total = 0
+    for (const s of state.sessions) {
+      if (s.gameId !== game.id) continue
+      if (teamFilter !== 'all' && s.experience !== teamFilter) continue
+      total++
+      if (s.teamSize == null) continue
+      map.set(s.teamSize, (map.get(s.teamSize) || 0) + 1)
+    }
+    const entries = [...map.entries()].sort((a, b) => a[0] - b[0])
+    return { total, entries }
+  }, [state.sessions, game.id, teamFilter])
+  // If the active size disappears after switching games or team-type, drop
+  // back to "all" so the view doesn't silently render empty.
+  useEffect(() => {
+    if (sizeFilter === 'all') return
+    if (!sizeCounts.entries.some(([size]) => size === sizeFilter)) {
+      setSizeFilter('all')
+    }
+  }, [sizeCounts, sizeFilter])
 
   const agg = useMemo(() => aggregateAcrossSessions(filteredSessions, game.id), [filteredSessions, game.id])
   const solveTimes = useMemo(() => aggregatePuzzleSolveTimes(filteredSessions, game), [filteredSessions, game])
@@ -196,13 +223,55 @@ function GameTrends({ games, gameId, setGameId, gameById, state, categoryColor }
         </div>
       </div>
 
+      {/* Team-size toggle — narrows every aggregate below to the picked group size.
+          Only sizes that actually appear (after the team-type filter) get pills. */}
+      {sizeCounts.entries.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-ink-400 font-semibold px-1">Players</div>
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar -mx-4 px-4">
+            <button
+              onClick={() => setSizeFilter('all')}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                sizeFilter === 'all'
+                  ? 'bg-accent-500 text-ink-50 border-accent-500'
+                  : 'bg-ink-800 text-ink-200 border-ink-700 active:bg-ink-700'
+              }`}
+            >
+              <span>Any</span>
+              <span className={`text-[10px] tabular-nums ${sizeFilter === 'all' ? 'opacity-90' : 'text-ink-400'}`}>
+                {sizeCounts.total}
+              </span>
+            </button>
+            {sizeCounts.entries.map(([size, count]) => {
+              const active = sizeFilter === size
+              return (
+                <button
+                  key={size}
+                  onClick={() => setSizeFilter(size)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                    active
+                      ? 'bg-accent-500 text-ink-50 border-accent-500'
+                      : 'bg-ink-800 text-ink-200 border-ink-700 active:bg-ink-700'
+                  }`}
+                >
+                  <span>{size}</span>
+                  <span className={`text-[10px] tabular-nums ${active ? 'opacity-90' : 'text-ink-400'}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <DemoStats game={game} agg={agg} />
 
       {agg.total === 0 ? (
         <div className="rounded-2xl bg-ink-800 border border-ink-700 p-5 text-center text-ink-400">
-          {teamFilter === 'all'
+          {teamFilter === 'all' && sizeFilter === 'all'
             ? 'No demos logged for this game yet.'
-            : `No ${teamFilter} demos for this game yet.`}
+            : `No demos match the current filters.`}
         </div>
       ) : (
         <>
