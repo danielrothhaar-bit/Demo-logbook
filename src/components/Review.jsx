@@ -472,6 +472,7 @@ function ReviewHeader({ session, totalSec }) {
   const [experience, setExperience] = useState(session.experience)
   const [date, setDate] = useState(session.date)
   const [time, setTime] = useState(session.time || '')
+  const [endTime, setEndTime] = useState(session.endTime || '')
 
   const designers = [...new Set(session.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
 
@@ -483,7 +484,7 @@ function ReviewHeader({ session, totalSec }) {
     dispatch({
       type: 'UPDATE_SESSION_META',
       sessionId: session.id,
-      patch: { gameId, teamSize, experience, date, time }
+      patch: { gameId, teamSize, experience, date, time, endTime }
     })
     setEditing(false)
   }
@@ -530,15 +531,20 @@ function ReviewHeader({ session, totalSec }) {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Date</div>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
               className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time</div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Start</div>
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={1800}
+              className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">End</div>
+            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} step={1800}
               className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
         </div>
@@ -568,7 +574,10 @@ function ReviewHeader({ session, totalSec }) {
             <span>{session.date}</span>
             {session.time && <>
               <span className="text-ink-500">|</span>
-              <span>{fmtClockTime(session.time)}</span>
+              <span>
+                {fmtClockTime(session.time)}
+                {session.endTime && <> – {fmtClockTime(session.endTime)}</>}
+              </span>
             </>}
           </div>
 
