@@ -20,6 +20,23 @@ const yesterdayISO = () => {
   return d.toISOString().slice(0, 10)
 }
 
+// Parse "mm:ss" or bare seconds into total seconds. Returns null if unparseable.
+// Minutes can exceed 59 so the field can also reset a runaway timer back to a sane value.
+function parseElapsed(str) {
+  if (str == null) return null
+  const trimmed = String(str).trim()
+  if (!trimmed) return null
+  const m = trimmed.match(/^(\d+):(\d{1,2})$/)
+  if (m) {
+    const minutes = parseInt(m[1], 10)
+    const seconds = parseInt(m[2], 10)
+    if (seconds > 59) return null
+    return minutes * 60 + seconds
+  }
+  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10)
+  return null
+}
+
 function csvCell(v) {
   const s = v == null ? '' : String(v)
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
@@ -472,7 +489,7 @@ function ReviewHeader({ session, totalSec }) {
   const [experience, setExperience] = useState(session.experience)
   const [date, setDate] = useState(session.date)
   const [time, setTime] = useState(session.time || '')
-  const [endTime, setEndTime] = useState(session.endTime || '')
+  const [elapsedStr, setElapsedStr] = useState(fmtTime(session.timerElapsed || 0))
 
   const designers = [...new Set(session.notes.map(n => n.designerId))].map(id => designerById(id)).filter(Boolean)
 
@@ -481,11 +498,14 @@ function ReviewHeader({ session, totalSec }) {
     : null
 
   const save = () => {
-    dispatch({
-      type: 'UPDATE_SESSION_META',
-      sessionId: session.id,
-      patch: { gameId, teamSize, experience, date, time, endTime }
-    })
+    const patch = { gameId, teamSize, experience, date, time }
+    const parsedElapsed = parseElapsed(elapsedStr)
+    if (parsedElapsed != null && parsedElapsed !== (session.timerElapsed || 0)) {
+      patch.timerElapsed = parsedElapsed
+      patch.timerRunning = false
+      patch.timerStartedAt = null
+    }
+    dispatch({ type: 'UPDATE_SESSION_META', sessionId: session.id, patch })
     setEditing(false)
   }
 
@@ -531,21 +551,26 @@ function ReviewHeader({ session, totalSec }) {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Date</div>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
               className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Start</div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Time</div>
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} step={1800}
               className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
           </div>
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">End</div>
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} step={1800}
-              className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500" />
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wider text-ink-400 mb-1">Elapsed (mm:ss)</div>
+          <input type="text" inputMode="numeric" value={elapsedStr}
+            onChange={(e) => setElapsedStr(e.target.value)}
+            placeholder="60:00"
+            className="w-full max-w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 outline-none focus:border-accent-500 font-mono tabular-nums" />
+          <div className="text-[11px] text-ink-500 mt-1">
+            Fix a runaway timer here (e.g. if the demo wasn't paused). Saving stops the timer.
           </div>
         </div>
 
@@ -574,10 +599,7 @@ function ReviewHeader({ session, totalSec }) {
             <span>{session.date}</span>
             {session.time && <>
               <span className="text-ink-500">|</span>
-              <span>
-                {fmtClockTime(session.time)}
-                {session.endTime && <> – {fmtClockTime(session.endTime)}</>}
-              </span>
+              <span>{fmtClockTime(session.time)}</span>
             </>}
           </div>
 
